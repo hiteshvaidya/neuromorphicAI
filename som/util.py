@@ -48,3 +48,20 @@ def cosine_similarity(tensor1, tensor2):
     cosine_similarity = dot_product / (norm1 * norm2)
 
     return cosine_similarity
+
+def variance_distance(sample, som_unit_values, som_unit_variances):
+    """
+    calculate RMS/L2 distance where each squared term is divided by the sqrt of the running variance each pixel in the SOM unit
+
+    :param sample: input sample
+    :type sample: 2D matrix of float values
+    :param som_unit_values: pixel values of the SOM unit
+    :type som_unit_values: 2D matrix of float values
+    :param som_unit_variances: running variances of every pixel in a SOM unit
+    :type som_unit_variances: 2D matrix of float values
+    :return: variance_distance value
+    :rtype: float
+    """
+    distance = tf.reduce_sum((sample - som_unit_values) * (sample - som_unit_values) / tf.math.sqrt(som_unit_variances))
+
+    return distance

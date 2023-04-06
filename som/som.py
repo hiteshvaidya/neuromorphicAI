@@ -12,6 +12,7 @@ import os
 import tensorflow as tf
 import random
 import util
+import math
 
 class SOM(object):
 
@@ -113,7 +114,66 @@ class SOM(object):
             for c in range(self.shapeY):
                 self.units[r, c].end_epoch(number_samples)
     
-    def insert_sample(self, current_iteration, sample, distance_choice):
-        compare_distance = 0
+    def getBMU(self, sample, distance_choice):
+        row_index, col_index = -1, -1
         if (distance_choice == "cosine"):
-            compare_distance = 
+            # get cosine similarity of sample from every unit
+            distances = tf.convert_to_tensor(np.array([np.array([self.units[i, j].getCosineSimilarity(sample) for j in range(self.shapeY)]) for i in range(self.shapeX)]))
+            
+            # get index of maximum cosine similarity value from flattened tensor of distances
+            max_index = tf.argmax(tf.reshape(distances, [-1]))
+
+            # get the row and column coordinates of the maximum element in the distances tensor
+            row_index = max_index // sample.shape[1]
+            col_index = max_index % sample.shape[1]
+
+        elif (distance_choice == "variance"):
+            # get variance distance values of input sample from every som unit
+            distances = tf.convert_to_tensor(np.array([np.array([self.units[i,j].getVarianceDistance(sample) for j in range(self.shapeY)]) for i in range(self.shapeX)]))
+
+            # get index of the mininum variance distance value from the flattened tensor of distances
+            min_index = tf.argmin(tf.reshape(distances, [-1]))
+
+            # get the row and column coordinates of the maximum element in the distances tensor
+            row_index = min_index // sample.shape[1]
+            col_index = min_index % sample.shape[1]
+        
+        return (row_index, col_index)
+
+    def insert_sample(self, current_iteration, sample, distance_choice):
+        
+        # get coordinates of BMU from the SOM based on the choice of distance function
+        (bmu_row, bmu_col) = self.getBMU(sample, distance_choice)
+
+        # increase the bmu count (i.e., number of times a unit was selected as BMU) for the newly calculated BMU [bmu_row, bmu_col]
+        self.units[bmu_row, bmu_col].class_stats[sample.getLabel()] += 1
+        self.units[bmu_row, bmu_col].bmu_count += 1
+
+        distance_modifier = 1.0 / (2.0 * self.units[bmu_row][bmu_col].radius * self.units[bmu_row][bmu_col].radius)
+
+        constant = -1.0 * tf.log(0.0000001 / self.units[bmu_row][bmu_col].learning_rate) / distance_modifier
+
+        diff, old_variance, variance_alpha, final_modifier = 0.0, 0.0, 0.0, 0.0
+
+        for r in range(self.shapeX):
+            for c in range(self.shapeY):
+                final_modifier = self.units[bmu_row, bmu_col].learning_rate * math.exp(-self.cartesian_distances[r, c, bmu_row, bmu_col]) * distance_modifier
+
+                if (self.cartesian_distances[r, c, bmu_row, bmu_col].radius):
+                    continue
+
+                variance_alpha = max(0, min(1.0, self.running_variance_alpha - 0.5) + 1 / (1 + math.exp(-self.cartesian_distances[r,c,bmu_row, bmu_col] / constant)))
+
+                for m in range(self.units[r, c].sizeX):
+                    for n in range(self.units[r, c].sizeY):
+                        diff = (sample.values[m,n] - self.units[r,c].getValues()[m,n])
+
+                        self.units[r, c].values[m, n] += final_modifier * diff
+
+                        self.units[r, c].variance[m, n] = (variance_alpha) * self.units[r, c].variance[m, n] + (1.0 - variance_alpha) * (sample.values[m, n] - self.units[r, c].values[m, n]) * (sample.values[m, n] - self.units[r, c].values[m, n])
+
+                tf.clip_by_value(self.units[r, c], 0.0, 1.0)
+
+        self.units[bmu_row, bmu_col].decayRadius()
+        self.units[bmu_row, bmu_col].decayLearningRate()
+
