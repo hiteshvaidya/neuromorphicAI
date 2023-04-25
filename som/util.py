@@ -65,3 +65,20 @@ def variance_distance(sample, som_unit_values, som_unit_variances):
     distance = tf.reduce_sum((sample - som_unit_values) * (sample - som_unit_values) / tf.math.sqrt(som_unit_variances))
 
     return distance
+
+def global_variance_distance(input_matrix, som_matrix, som_running_variances):
+    """
+    calculate the element-wise distance using running variance values but do not perform summation over terms in the L2 distance
+
+    :param input_matrix: tiled matrix of input image
+    :type input_matrix: tensor of float values
+    :param som_matrix: som matrix
+    :type som_matrix: tensor of float values
+    :param som_running_variances: matrix of running variances in SOM
+    :type som_running_variances: tensor of float values
+    :return: matrix of element-wise distance values
+    :rtype: tensor of float values
+    """
+    distance_matrix = (input_matrix - som_matrix) * (input_matrix - som_matrix) / tf.math.sqrt(som_running_variances)
+    
+    return distance_matrix
