@@ -12,6 +12,7 @@ import os
 from layer import CustomDistanceLayer
 import dataloader
 from MinLayer import MinLayer
+import util
 
 class Network(tf.keras.Model):
     """
@@ -20,7 +21,7 @@ class Network(tf.keras.Model):
     :param tf: tensorflow
     :type tf: tensorflow layer object
     """
-    def __init__(self, imgSize, n_units):
+    def __init__(self, imgSize, n_units, radius, learning_rate, running_variance_alpha):
         """
         constructor
 
@@ -30,8 +31,14 @@ class Network(tf.keras.Model):
         :type n_units: int
         """
         super(Network, self).__init__()
+        # Total number of pixels in a row and column of SOM
         self.shapeX = imgSize * n_units
         self.shapeY = imgSize * n_units
+
+        # Total number of units in the SOM
+        self.unitsX = n_units
+        self.unitsY = n_units
+
         # randomly initialize pixels of the SOM
         self.som = tf.random.normal([self.shapeX, self.shapeY],
                                     0.1, 0.3)
@@ -39,10 +46,53 @@ class Network(tf.keras.Model):
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
         # Initialize the matrix for running variance
         self.running_variance = tf.ones([self.shapeX, self.shapeY]) * 0.5
+        # alpha value for updating running variance
+        self.running_variance_alpha = running_variance_alpha
+
+        # Calculate distances between units of the SOM
+        self.cartesian_distances = util.calculate_distances(n_units, n_units)
+        
+        # Create a mask for weight update
+        self.mask = tf.zeros([self.shapeX, self.shapeY])
+
+        # Create a matrix for keeping a count of how many times a unit was selected as BMU
+        self.class_count = tf.zeros([n_units, n_units])
+
+        # Create a matrix for radius of every unit
+        self.radius = radius * tf.ones([n_units, n_units])
+
+        # Create a matrix for learning rate of every unit
+        self.learning_rates = learning_rate * tf.ones([n_units, n_units])
         
         # Declare the layers of the network
         self.layer1 = CustomDistanceLayer(imgSize, n_units)
         self.layer2 = MinLayer(n_units)
+
+    def create_mask(self, bmu, input_matrix):
+        # create a distance modifier for neighbourhood function
+        distance_modifier = 1.0 / (2.0 * self.radius[bmu[0], bmu[1]] * self.radius[bmu[0], bmu[1]])
+
+        # create a constant used for updating variance_alpha
+        constant = -1.0 * tf.log(1E-7 / self.learning_rates[bmu[0], bmu[1]]) / distance_modifier
+
+        diff, old_variance, variance_alpha, final_modifier = 0.0, 0.0, 0.0, 0.0
+
+        final_modifier = self.learning_rates * tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]]) * distance_modifier
+
+        print("final_modifier: ", tf.shape(final_modifier))
+
+        # # Do not perform weight update for a unit that is farther than the current radius of the BMU
+        # if (self.cartesian_distances[r, c, bmu[0], bmu[1]] > self.radius[bmu[0], bmu[1]]):
+        #     continue
+
+        # variance_alpha = max(0, min(1.0, self.running_variance_alpha - 0.5) + 1 / (1 + tf.math.exp(-self.cartesian_distances[r, c, bmu[0],bmu[1]] / constant)))
+
+        # for m in range(self.unitsX):
+        #     for n in range(self.unitsY):
+        #         diff = input_matrix - self.som
+
+
+
     
     def forwardPass(self, x):
         """
@@ -51,17 +101,21 @@ class Network(tf.keras.Model):
         :param x: input image
         :type x: matrix of float values
         """
-        x = self.layer1(self.som, self.running_variance, x)
-        x = self.layer2(x)
-        print("min value:", x)
+        z = self.layer1(self.som, self.running_variance, x)
+        input_matrix, z = self.layer2(z)
+        print("input_matrix: \n", input_matrix)
+        print("=======================")
+        print("min value: ", z)
+        self.create_mask(x, input_matrix)
         
 
 if __name__ == '__main__':
     # set gpu
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     # Declare the object of the network
-    network = Network(28, 5)
+    network = Network(28, 2)
     # Load the data
     (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
     # Test the forward pass
+    print("x_train[0]: \n", x_train[0])
     network.forwardPass(x_train[0])
