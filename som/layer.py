@@ -76,4 +76,4 @@ class CustomDistanceLayer(tf.keras.layers.Layer):
         # reshape patches to [num_units_in_SOM, num_units_in_SOM]
         patches = tf.reshape(patches, [self.tile_shape, self.tile_shape])
         
-        return patches
+        return self.kernel, patches
