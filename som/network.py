@@ -21,7 +21,7 @@ class Network(tf.keras.Model):
     :param tf: tensorflow
     :type tf: tensorflow layer object
     """
-    def __init__(self, imgSize, n_units, radius, learning_rate, running_variance_alpha):
+    def __init__(self, imgSize, n_units, radius, learning_rate, running_variance, running_variance_alpha):
         """
         constructor
 
@@ -45,7 +45,7 @@ class Network(tf.keras.Model):
         # clip values between 0 and 1
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
         # Initialize the matrix for running variance
-        self.running_variance = tf.ones([self.shapeX, self.shapeY]) * 0.5
+        self.running_variance = tf.ones([self.shapeX, self.shapeY]) * running_variance
         # alpha value for updating running variance
         self.running_variance_alpha = running_variance_alpha
 
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     # set gpu
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     # Declare the object of the network
-    network = Network(28, 2)
+    network = Network(28, 2, 1.5, 0.7, 0.5, 0.9)
     # Load the data
     (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
     # Test the forward pass
