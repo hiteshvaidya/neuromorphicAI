@@ -159,7 +159,7 @@ class SOM(object):
             for c in range(self.shapeY):
                 final_modifier = self.units[bmu_row, bmu_col].learning_rate * math.exp(-self.cartesian_distances[r, c, bmu_row, bmu_col]) * distance_modifier
 
-                if (self.cartesian_distances[r, c, bmu_row, bmu_col].radius):
+                if (self.cartesian_distances[r, c, bmu_row, bmu_col] > self.units[bmu_row, bmu_col].radius):
                     continue
 
                 variance_alpha = max(0, min(1.0, self.running_variance_alpha - 0.5) + 1 / (1 + math.exp(-self.cartesian_distances[r,c,bmu_row, bmu_col] / constant)))
