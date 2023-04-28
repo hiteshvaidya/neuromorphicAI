@@ -21,7 +21,7 @@ class Network(tf.keras.Model):
     :param tf: tensorflow
     :type tf: tensorflow layer object
     """
-    def __init__(self, imgSize, n_units, radius, learning_rate, running_variance, running_variance_alpha):
+    def __init__(self, imgSize, n_units, n_classes, radius, learning_rate, running_variance, running_variance_alpha):
         """
         constructor
 
@@ -44,6 +44,10 @@ class Network(tf.keras.Model):
                                     0.1, 0.3)
         # clip values between 0 and 1
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
+
+        # bmu_count for every unit i.e. how many number of times a unit was selected as BMU
+        self.bmu_count = tf.zeros([n_units, n_units, n_classes])
+
         # Initialize the matrix for running variance
         self.running_variance = tf.ones([self.shapeX, self.shapeY]) * running_variance
         # alpha value for updating running variance
@@ -67,6 +71,21 @@ class Network(tf.keras.Model):
         # Declare the layers of the network
         self.layer1 = CustomDistanceLayer(imgSize, n_units)
         self.layer2 = MinLayer(n_units)
+
+    def decayRadius(self, bmu):
+        decay = tf.exp(-self.bmu_count[bmu] / 15)
+        self.radius = tf.tensor_scatter_nd_update(self.radius, bmu, decay)
+        self.radius = tf.math.maximum(0.00001 * tf.ones(
+                                        tf.shape(self.radius)), 
+                                        self.radius)
+
+    def decayLearningRate(self, bmu):
+        decay = tf.exp(-self.bmu_count[bmu] / 25)
+        self.learning_rates = tf.tensor_scatter_nd_update(self.learning_rates,
+                                                    bmu, decay)
+        self.learning_rates = tf.math.maximum(0.00001 * tf.ones(
+                                        tf.shape(self.learning_rates)), 
+                                        self.learning_rates)
 
     def create_mask(self, bmu, input_matrix):
         # create a distance modifier for neighbourhood function
@@ -93,19 +112,23 @@ class Network(tf.keras.Model):
 
         print("final_modifier: ", (final_modifier))
 
-        variance_alpha  = tf.math.maximum(0.0,  tf.math.min())
+        variance_alpha  = (self.running_variance_alpha - 0.5) + 1.0 / (1.0 + tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] / constant))
+        variance_alpha = tf.clip_by_value(variance_alpha, 0.0, 1.0)
+
+        print("variance_alpha:\n", variance_alpha)
 
         # Perform the weight update
         self.som += final_modifier * (input_matrix - self.som)
 
+        # Update running variance of SOM
+        self.running_variance = variance_alpha * self.running_variance + (1.0 - variance_alpha) * (input_matrix - self.som) * (input_matrix - self.som)
 
-        # variance_alpha = max(0, min(1.0, self.running_variance_alpha - 0.5) + 1 / (1 + tf.math.exp(-self.cartesian_distances[r, c, bmu[0],bmu[1]] / constant)))
+        # clip the values of SOM
+        self.som = tf.clip_by_value(self.som, 0.0, 1.0)
 
-        # for m in range(self.unitsX):
-        #     for n in range(self.unitsY):
-        #         diff = input_matrix - self.som
-
-
+        # Decay parameters
+        self.decayRadius(bmu)
+        self.decayLearningRate(bmu)
 
     
     def forwardPass(self, x):
