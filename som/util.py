@@ -23,7 +23,7 @@ def calculate_distances(rows, cols):
             for i in range(rows):
                 for j in range(cols):
                     distances[x][y][i][j] = (x-i) * (x-i) + (y-j) * (y-j)
-    distances = tf.math.sqrt(tf.convert_to_tensor(distances))
+    distances = tf.math.sqrt(tf.convert_to_tensor(distances, dtype=tf.float32))
     return distances
 
 def cosine_similarity(tensor1, tensor2):
