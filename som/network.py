@@ -151,7 +151,7 @@ if __name__ == '__main__':
     # set gpu
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     # Declare the object of the network
-    network = Network(28, 2, 1.5, 0.7, 0.5, 0.9)
+    network = Network(28, 2, 10, 1.5, 0.7, 0.5, 0.9)
     # Load the data
     (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
     # Test the forward pass
