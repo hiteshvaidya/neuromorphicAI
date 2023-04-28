@@ -17,13 +17,13 @@ def calculate_distances(rows, cols):
     :return: distances
     :rtype: 4D numpy array
     """
-    distances = tf.zeros([rows, cols, rows, cols], dtype=tf.float32)
+    distances = np.zeros([rows, cols, rows, cols], dtype=np.float32)
     for x in range(rows):
         for y in range(cols):
             for i in range(rows):
                 for j in range(cols):
-                    distances[x][y][i][j].assign(tf.sqrt((x-i) * (x-i) + (y-j) * (y-j)))
-                    
+                    distances[x][y][i][j] = (x-i) * (x-i) + (y-j) * (y-j)
+    distances = tf.math.sqrt(tf.convert_to_tensor(distances))
     return distances
 
 def cosine_similarity(tensor1, tensor2):

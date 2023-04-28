@@ -73,17 +73,31 @@ class Network(tf.keras.Model):
         distance_modifier = 1.0 / (2.0 * self.radius[bmu[0], bmu[1]] * self.radius[bmu[0], bmu[1]])
 
         # create a constant used for updating variance_alpha
-        constant = -1.0 * tf.log(1E-7 / self.learning_rates[bmu[0], bmu[1]]) / distance_modifier
+        constant = -1.0 * tf.math.log(1E-7 / self.learning_rates[bmu[0], bmu[1]]) / distance_modifier
 
         diff, old_variance, variance_alpha, final_modifier = 0.0, 0.0, 0.0, 0.0
 
-        final_modifier = self.learning_rates * tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]]) * distance_modifier
+        # We do not perform weight update for units that are farther in the neighbourhood of BMU, than the radius of BMU 
+        # This mean, we use the radius of BMU as threashold and set distance values of all the units farther than the threshold to be 0 so as to avoid weight update for them
+        modifier = tf.where(self.cartesian_distances[:, :, bmu[0], bmu[1]] > self.radius[bmu[0], bmu[1]], tf.zeros_like(self.radius), self.cartesian_distances[:, :, bmu[0], bmu[1]])
 
+        final_modifier = self.learning_rates * tf.math.exp(-modifier) * distance_modifier
+
+        print("final_modifier: ", (final_modifier))
+
+        final_modifier = tf.repeat(final_modifier, repeats=self.shapeY // self.unitsY, axis=1)
         print("final_modifier: ", tf.shape(final_modifier))
+        final_modifier = tf.repeat(final_modifier, repeats=self.shapeX // self.unitsX, axis=0)
+        print("final_modifier: ", tf.shape(final_modifier))
+        final_modifier = tf.reshape(final_modifier, [self.shapeX, self.shapeY])
 
-        # # Do not perform weight update for a unit that is farther than the current radius of the BMU
-        # if (self.cartesian_distances[r, c, bmu[0], bmu[1]] > self.radius[bmu[0], bmu[1]]):
-        #     continue
+        print("final_modifier: ", (final_modifier))
+
+        variance_alpha  = tf.math.maximum(0.0,  tf.math.min())
+
+        # Perform the weight update
+        self.som += final_modifier * (input_matrix - self.som)
+
 
         # variance_alpha = max(0, min(1.0, self.running_variance_alpha - 0.5) + 1 / (1 + tf.math.exp(-self.cartesian_distances[r, c, bmu[0],bmu[1]] / constant)))
 
@@ -101,12 +115,13 @@ class Network(tf.keras.Model):
         :param x: input image
         :type x: matrix of float values
         """
-        z = self.layer1(self.som, self.running_variance, x)
-        input_matrix, z = self.layer2(z)
+        input_matrix, z = self.layer1(self.som, self.running_variance, x)
+        print("feature map: ", tf.shape(z))
+        bmu = self.layer2(z)
         print("input_matrix: \n", input_matrix)
         print("=======================")
-        print("min value: ", z)
-        self.create_mask(x, input_matrix)
+        print("min value: ", bmu)
+        self.create_mask(bmu, input_matrix)
         
 
 if __name__ == '__main__':
