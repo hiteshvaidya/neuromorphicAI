@@ -67,6 +67,8 @@ class Network(tf.keras.Model):
 
         self.current_class = -1.0
 
+        self.current_class = -1.0
+
         # Create a matrix for radius of every unit
         self.radius = radius * tf.ones([n_units, n_units])
 
@@ -194,11 +196,8 @@ if __name__ == '__main__':
     # Declare the object of the network for class 0
     network = Network(28, 2, 0, 10, 1.5, 0.7, 0.5, 0.9)
 
-    # Send all input images corresponding to class 0 one by one to the network using "forwardPass" ----> CHANGE HERE
+    # Send all input images corresponding to class 0 one by one to the network using "forwardPass"
     network.forwardPass(x_train[0], y_train[0])
-
-    # once all the images are sent, change the current_class value to class 1 and then send all the input images belonging to class 1
-    network.updateCurrentClass(1)
 
     # do this for all classes that we want to train our SOM on
 
