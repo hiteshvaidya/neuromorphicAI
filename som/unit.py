@@ -20,6 +20,7 @@ class Unit(object):
         self.radius = radius
         self.learning_rate = learning_rate
         self.bmu_count = 0
+        self.predictedClass = -1
 
     def getSize(self):
         pair = (self.sizeX, self.sizeY)
@@ -79,3 +80,7 @@ class Unit(object):
 
     def endEpoch(self, number_samples):
         self.variance /= number_samples
+
+    def getPredictedClass(self):
+        predictedClass = tf.argmax(self.class_stats)
+        return predictedClass

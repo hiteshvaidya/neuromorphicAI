@@ -5,8 +5,8 @@ Version: 1.0
 author: Hitesh Vaidya
 """
 
-from Unit import Unit
-from Sample import Sample
+from unit import Unit
+from sample import Sample
 import numpy as np
 import os
 import tensorflow as tf

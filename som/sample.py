@@ -10,7 +10,7 @@ author: Manali Dangarikar
 import numpy as np
 import tensorflow as tf
 
-class Sample:   
+class Sample(object):   
     """
     class for representing one input sample
     """
