@@ -29,6 +29,8 @@ class Network(tf.keras.Model):
         :type imgSize: int
         :param n_units: number of units in the SOM
         :type n_units: int
+        :param current_class: number of the class we are currently training the som on
+        :type current_class: int
         """
         super(Network, self).__init__()
         # Total number of pixels in a row and column of SOM
@@ -45,11 +47,12 @@ class Network(tf.keras.Model):
         # clip values between 0 and 1
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
 
-        # bmu_count for every unit i.e. how many number of times a unit was selected as BMU
-        self.bmu_count = tf.zeros([n_units, n_units, n_classes])
+        # class_count for every unit i.e. how many number of times a unit was selected as BMU
+        self.class_count = tf.zeros([n_units, n_units, n_classes])
 
         # Initialize the matrix for running variance
         self.running_variance = tf.ones([self.shapeX, self.shapeY]) * running_variance
+
         # alpha value for updating running variance
         self.running_variance_alpha = running_variance_alpha
 
@@ -59,8 +62,10 @@ class Network(tf.keras.Model):
         # Create a mask for weight update
         self.mask = tf.zeros([self.shapeX, self.shapeY])
 
-        # Create a matrix for keeping a count of how many times a unit was selected as BMU
-        self.class_count = tf.zeros([n_units, n_units])
+        # Create a matrix for storing the predicted class for an unit selected as a BMU
+        self.predicted_class = tf.ones([n_units, n_units]) * (-1.0)
+
+        self.current_class = -1.0
 
         # Create a matrix for radius of every unit
         self.radius = radius * tf.ones([n_units, n_units])
@@ -86,8 +91,31 @@ class Network(tf.keras.Model):
         self.learning_rates = tf.math.maximum(0.00001 * tf.ones(
                                         tf.shape(self.learning_rates)), 
                                         self.learning_rates)
+    
+    def setCurrentClass(self, current_class):
+        self.current_class = current_class
 
-    def create_mask(self, bmu, input_matrix):
+    def setClassCount(self, bmu):
+        # create the indices tensor for the element you want to update   ----> TESTED
+        indices = tf.expand_dims(tf.concat([bmu, [self.current_class]], axis=0), axis=0)
+
+        # create the values tensor with the increment value you want to add
+        values = tf.ones([1,], dtype=self.class_count.dtype)
+
+        # update the tensor
+        self.class_count = tf.tensor_scatter_nd_add(self.class_count, indices, values)
+
+        # self.class_count[bmu[0], bmu[1], self.current_class] += 1
+
+    def setPredictedClass(self):
+        # Find the class with the highest count for each unit
+        # We can use the max layer here instead, which we have created for the inference model
+        max_indices = tf.math.argmax(self.class_count, axis=-1)
+
+        # Update the predicted class for each unit
+        self.predicted_class = tf.cast(max_indices, dtype=tf.float32)
+
+    def create_mask(self, bmu, input_matrix, current_class):
         # create a distance modifier for neighbourhood function
         distance_modifier = 1.0 / (2.0 * self.radius[bmu[0], bmu[1]] * self.radius[bmu[0], bmu[1]])
 
@@ -129,9 +157,11 @@ class Network(tf.keras.Model):
         # Decay parameters
         self.decayRadius(bmu)
         self.decayLearningRate(bmu)
+        self.setCurrentClass(current_class)
+        self.setClassCount(bmu)
 
     
-    def forwardPass(self, x):
+    def forwardPass(self, x, y):
         """
         Forward pass through the network
 
@@ -144,16 +174,34 @@ class Network(tf.keras.Model):
         print("input_matrix: \n", input_matrix)
         print("=======================")
         print("min value: ", bmu)
-        self.create_mask(bmu, input_matrix)
+        self.create_mask(bmu, input_matrix, y)
         
 
 if __name__ == '__main__':
     # set gpu
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     # Declare the object of the network
-    network = Network(28, 2, 10, 1.5, 0.7, 0.5, 0.9)
+    # network = Network(28, 2, 10, 1.5, 0.7, 0.5, 0.9)
     # Load the data
     (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
     # Test the forward pass
+
+    # Note: When we pass each training input image to the forward pass, we will also have to send a parameter that gives information about the class this image belongs to.
+    # Another approach to this could be to re-intialise the network object to consider the class number every time we change class of input train images.
     print("x_train[0]: \n", x_train[0])
-    network.forwardPass(x_train[0])
+    # network.forwardPass(x_train[0], y_train[0])
+
+    # Declare the object of the network for class 0
+    network = Network(28, 2, 0, 10, 1.5, 0.7, 0.5, 0.9)
+
+    # Send all input images corresponding to class 0 one by one to the network using "forwardPass" ----> CHANGE HERE
+    network.forwardPass(x_train[0], y_train[0])
+
+    # once all the images are sent, change the current_class value to class 1 and then send all the input images belonging to class 1
+    network.updateCurrentClass(1)
+
+    # do this for all classes that we want to train our SOM on
+
+    # once we are done with training for all classes, we can fill in our predicted class matrix
+    network.setPredictedClass()
+
