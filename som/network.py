@@ -73,10 +73,7 @@ class Network(tf.keras.Model):
         self.layer2 = MinLayer(n_units)
 
     def decayRadius(self, bmu):
-        print("decay bmu at: ", bmu)
-        print("class_count shape: ", self.class_count.shape)
         decay = tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
-        print("radius decay: ", decay)
         self.radius = tf.tensor_scatter_nd_update(self.radius, [bmu], [decay])
         self.radius = tf.math.maximum(0.00001 * tf.ones(
                                         tf.shape(self.radius)), 
@@ -90,7 +87,7 @@ class Network(tf.keras.Model):
                                         tf.shape(self.learning_rates)), 
                                         self.learning_rates)
 
-    def create_mask(self, bmu, input_matrix, label):
+    def weight_update(self, bmu, input_matrix, label):
         # create a distance modifier for neighbourhood function
         distance_modifier = 1.0 / (2.0 * self.radius[bmu[0], bmu[1]] * self.radius[bmu[0], bmu[1]])
 
@@ -105,20 +102,12 @@ class Network(tf.keras.Model):
 
         final_modifier = self.learning_rates * tf.math.exp(-modifier) * distance_modifier
 
-        print("final_modifier: ", (final_modifier))
-
         final_modifier = tf.repeat(final_modifier, repeats=self.shapeY // self.unitsY, axis=1)
-        print("final_modifier: ", tf.shape(final_modifier))
         final_modifier = tf.repeat(final_modifier, repeats=self.shapeX // self.unitsX, axis=0)
-        print("final_modifier: ", tf.shape(final_modifier))
         final_modifier = tf.reshape(final_modifier, [self.shapeX, self.shapeY])
-
-        print("final_modifier: ", (final_modifier))
 
         variance_alpha  = (self.running_variance_alpha - 0.5) + 1.0 / (1.0 + tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] / constant))
         variance_alpha = tf.clip_by_value(variance_alpha, 0.0, 1.0)
-
-        print("variance_alpha:\n", variance_alpha)
 
         # Perform the weight update
         self.som += final_modifier * (input_matrix - self.som)
@@ -127,7 +116,7 @@ class Network(tf.keras.Model):
         self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
 
         variance_alpha = tf.tile(variance_alpha, [self.shapeX // self.unitsX, self.shapeY // self.unitsY])
-        print("variance_alpha:\n", variance_alpha)
+        
         # Update running variance of SOM
         self.running_variance = variance_alpha * self.running_variance + (1.0 - variance_alpha) * (input_matrix - self.som) * (input_matrix - self.som)
 
@@ -146,22 +135,25 @@ class Network(tf.keras.Model):
         :param x: input image
         :type x: matrix of float values
         """
-        input_matrix, z = self.layer1(self.som, self.running_variance, x)
-        print("feature map: ", tf.shape(z))
-        bmu = self.layer2(z)
-        print("input_matrix: \n", input_matrix)
-        print("=======================")
-        print("min value: ", bmu)
-        self.create_mask(bmu, input_matrix, y)
-        
+        tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
+        bmu = self.layer2(unit_map)
+        print("bmu index:", bmu)
+        self.weight_update(bmu, tiled_input, y)
+        print("weight udpated")
 
 if __name__ == '__main__':
     # set gpu
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     # Declare the object of the network
-    network = Network(28, 2, 10, 1.5, 0.7, 0.5, 0.9)
+    network = Network(28, 10, 10, 1.5, 0.7, 0.5, 0.9)
     # Load the data
     (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
-    # Test the forward pass
-    print("x_train[0]: \n", x_train[0])
-    network.forwardPass(x_train[0], y_train[0])
+    
+    # Perform the forward pass
+    for index in range(x_train.shape[0]):
+        network.forwardPass(x_train[index], y_train[index])
+    
+    # save the trained model
+    if not os.path.exists('./data'):
+        os.makedirs("./data")
+    dataloader.saveModel(network, "data/trained_som_network.pkl")
