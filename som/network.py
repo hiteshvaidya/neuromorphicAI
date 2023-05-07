@@ -46,7 +46,7 @@ class Network(tf.keras.Model):
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
 
         # bmu_count for every unit i.e. how many number of times a unit was selected as BMU
-        self.bmu_count = tf.zeros([n_units, n_units, n_classes])
+        self.class_count = tf.zeros([n_units, n_units, n_classes])
 
         # Initialize the matrix for running variance
         self.running_variance = tf.ones([self.shapeX, self.shapeY]) * running_variance
@@ -60,7 +60,7 @@ class Network(tf.keras.Model):
         self.mask = tf.zeros([self.shapeX, self.shapeY])
 
         # Create a matrix for keeping a count of how many times a unit was selected as BMU
-        self.class_count = tf.zeros([n_units, n_units])
+        # self.class_count = tf.zeros([n_units, n_units])
 
         # Create a matrix for radius of every unit
         self.radius = radius * tf.ones([n_units, n_units])
@@ -73,21 +73,24 @@ class Network(tf.keras.Model):
         self.layer2 = MinLayer(n_units)
 
     def decayRadius(self, bmu):
-        decay = tf.exp(-self.bmu_count[bmu] / 15)
-        self.radius = tf.tensor_scatter_nd_update(self.radius, bmu, decay)
+        print("decay bmu at: ", bmu)
+        print("class_count shape: ", self.class_count.shape)
+        decay = tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
+        print("radius decay: ", decay)
+        self.radius = tf.tensor_scatter_nd_update(self.radius, [bmu], [decay])
         self.radius = tf.math.maximum(0.00001 * tf.ones(
                                         tf.shape(self.radius)), 
                                         self.radius)
 
     def decayLearningRate(self, bmu):
-        decay = tf.exp(-self.bmu_count[bmu] / 25)
+        decay = tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 25)
         self.learning_rates = tf.tensor_scatter_nd_update(self.learning_rates,
-                                                    bmu, decay)
+                                                    [bmu], [decay])
         self.learning_rates = tf.math.maximum(0.00001 * tf.ones(
                                         tf.shape(self.learning_rates)), 
                                         self.learning_rates)
 
-    def create_mask(self, bmu, input_matrix):
+    def create_mask(self, bmu, input_matrix, label):
         # create a distance modifier for neighbourhood function
         distance_modifier = 1.0 / (2.0 * self.radius[bmu[0], bmu[1]] * self.radius[bmu[0], bmu[1]])
 
@@ -120,6 +123,11 @@ class Network(tf.keras.Model):
         # Perform the weight update
         self.som += final_modifier * (input_matrix - self.som)
 
+        
+        self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
+
+        variance_alpha = tf.tile(variance_alpha, [self.shapeX // self.unitsX, self.shapeY // self.unitsY])
+        print("variance_alpha:\n", variance_alpha)
         # Update running variance of SOM
         self.running_variance = variance_alpha * self.running_variance + (1.0 - variance_alpha) * (input_matrix - self.som) * (input_matrix - self.som)
 
@@ -131,7 +139,7 @@ class Network(tf.keras.Model):
         self.decayLearningRate(bmu)
 
     
-    def forwardPass(self, x):
+    def forwardPass(self, x, y):
         """
         Forward pass through the network
 
@@ -144,7 +152,7 @@ class Network(tf.keras.Model):
         print("input_matrix: \n", input_matrix)
         print("=======================")
         print("min value: ", bmu)
-        self.create_mask(bmu, input_matrix)
+        self.create_mask(bmu, input_matrix, y)
         
 
 if __name__ == '__main__':
@@ -156,4 +164,4 @@ if __name__ == '__main__':
     (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
     # Test the forward pass
     print("x_train[0]: \n", x_train[0])
-    network.forwardPass(x_train[0])
+    network.forwardPass(x_train[0], y_train[0])
