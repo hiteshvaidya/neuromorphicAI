@@ -19,16 +19,16 @@ def loadmnist():
     
     return (x_train, y_train), (x_test, y_test)
 
-def saveModel(model, filepath):
+def saveModel(object, filepath):
     """
     dump the model to a location in pickle format
 
-    :param model: SOM network
-    :type model: Network() object
+    :param object: som configuration
+    :type object: dict
     :param filepath: save location
     :type filepath: str
     """
-    pkl.dump(model, open(filepath, 'wb'))
+    pkl.dump(object, open(filepath, 'wb'))
 
 def loadSplitData(path, class_number):
     """
