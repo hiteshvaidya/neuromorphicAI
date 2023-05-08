@@ -15,7 +15,10 @@ import dataloader
 from MinLayer import MinLayer
 import util
 import cv2
+import time
+import numpy as np
 import argparse
+from tqdm import tqdm
 
 class Network(tf.keras.Model):
     """
@@ -106,7 +109,29 @@ class Network(tf.keras.Model):
         cv2.imshow("Self Organizing Map", self.som.numpy())
         # wait for 1 milli-seconds
         cv2.waitKey(1)
+    
+    def displayVariance(self):
+        """
+        Display the running variance values of all SOM units
+        """
+        cv2.imshow("SOM variance", self.running_variance.numpy())
+        cv2.waitkey(1)
+    
+    def saveImage(self, folder_path, index):
+        """
+        save an image of the current state of SOM
 
+        :param folder_path: folder location
+        :param folder_path: str
+        :param index: current class index
+        :type index: int
+        """
+        image = self.som.numpy()
+        variance = self.running_variance.numpy()
+        image = (image * 255).astype(np.uint8)
+        variance = (variance * 255).astype(np.uint8)
+        cv2.imwrite(os.path.join(folder_path, str(index) + ".png"), image)
+        cv2.imwrite(os.path.join(folder_path, str(index) + "_variance.png"), variance)
 
     def weight_update(self, bmu, input_matrix, label):
         # create a distance modifier for neighbourhood function
@@ -115,12 +140,10 @@ class Network(tf.keras.Model):
         # create a constant used for updating variance_alpha
         constant = -1.0 * tf.math.log(1E-8 / self.learning_rates[bmu[0], bmu[1]]) / distance_modifier
 
-        diff, old_variance, variance_alpha, final_modifier = 0.0, 0.0, 0.0, 0.0
-
         # We do not perform weight update for units that are farther in the neighbourhood of BMU, than the radius of BMU 
         # This mean, we use the radius of BMU as threashold and set distance values of all the units farther than the threshold to be 0 so as to avoid weight update for them
-        mask = tf.where(self.cartesian_distances[ :, :, bmu[0], bmu[1]] > self.radius[bmu[0], bmu[1]], tf.zeros_like(self.cartesian_distances[ :, :, bmu[0], bmu[1]]), self.cartesian_distances[ :, :, bmu[0], bmu[1]])
-        mask = tf.tensor_scatter_nd_update(mask, [bmu], [1])
+        mask = tf.where(self.cartesian_distances[ :, :, bmu[0], bmu[1]] > self.radius[bmu[0], bmu[1]], tf.zeros_like(self.cartesian_distances[ :, :, bmu[0], bmu[1]]), tf.ones([self.unitsX, self.unitsY], dtype=tf.float32))
+        
 
         final_modifier = mask * self.learning_rates * tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] * distance_modifier)
 
@@ -146,6 +169,7 @@ class Network(tf.keras.Model):
         variance_alpha = tf.repeat(variance_alpha, repeats=self.shapeX // self.unitsX, axis=1)
         variance_alpha = tf.repeat(variance_alpha, repeats=self.shapeY // self.unitsY, axis=0)
         variance_alpha = tf.reshape(variance_alpha, [self.shapeX, self.shapeY])
+        
         # variance_alpha = tf.tile(variance_alpha, [self.shapeX // self.unitsX, self.shapeY // self.unitsY])
         
         # Update running variance of SOM
@@ -207,28 +231,39 @@ if __name__ == '__main__':
         # set gpu id
         os.environ["CUDA_VISIBLE_DEVICES"] = args.gpuid
    
+    # create 'logs' folder
+    if not os.path.exists("logs"):
+        os.makedirs("logs")
+    # create a folder for current experiment
+    folder_path = os.path.join(os.getcwd(), 'logs', args.filepath)
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
+
     # Declare the object of the network
     network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
-    
+
+    start_time = time.time()
     # Perform the forward pass
     for index in range(10):
         # Load the data
         class_train_samples = dataloader.loadClassIncremental("../data/mnist/train/", index, 1)
         
         # train on current class
-        for index, sample in enumerate(class_train_samples):
-            # print("sample: ", sample)
-            # print("sample value: ", sample.values)
+        tqdm.write("current class " + str(index))
+        for cursor, sample in tqdm(enumerate(class_train_samples)):
             network.forwardPass(sample.getImage(), sample.getLabel())
-            network.visualize_model()
-            if index == 100:
-                break
-    
+            # network.visualize_model()
+            # network.displayVariance()
+        
+        # save the image of current state of SOM
+        network.saveImage(folder_path, index)
+
+    execution_time = time.time() - start_time
     # Destroy all cv2 windows
-    cv2.destroyAllWindows()
-    
-    if not os.path.exists("logs"):
-        os.makedirs("logs")
+    # cv2.destroyAllWindows()
+
+    print(f"total execution time = {execution_time} seconds" )    
+
     # save the trained model
     config = network.getConfig()
-    dataloader.saveModel(config, os.path.join("logs", args.filepath))
+    dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
