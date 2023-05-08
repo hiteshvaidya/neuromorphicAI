@@ -48,7 +48,7 @@ class Network(tf.keras.Model):
         # clip values between 0 and 1
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
 
-        # bmu_count for every unit i.e. how many number of times a unit was selected as BMU
+        # class_count for every unit i.e. how many number of times a unit was selected as BMU for every class in the dataset
         self.class_count = tf.zeros([n_units, n_units, n_classes])
 
         # Initialize the matrix for running variance
@@ -59,12 +59,6 @@ class Network(tf.keras.Model):
         # Calculate distances between units of the SOM
         self.cartesian_distances = util.calculate_distances(n_units, n_units)
         
-        # Create a mask for weight update
-        self.mask = tf.zeros([self.shapeX, self.shapeY])
-
-        # Create a matrix for keeping a count of how many times a unit was selected as BMU
-        # self.class_count = tf.zeros([n_units, n_units])
-
         # Create a matrix for radius of every unit
         self.radius = radius * tf.ones([n_units, n_units])
 
@@ -119,16 +113,16 @@ class Network(tf.keras.Model):
         distance_modifier = 1.0 / (2.0 * self.radius[bmu[0], bmu[1]] * self.radius[bmu[0], bmu[1]])
 
         # create a constant used for updating variance_alpha
-        constant = -1.0 * tf.math.log(1E-7 / self.learning_rates[bmu[0], bmu[1]]) / distance_modifier
+        constant = -1.0 * tf.math.log(1E-8 / self.learning_rates[bmu[0], bmu[1]]) / distance_modifier
 
         diff, old_variance, variance_alpha, final_modifier = 0.0, 0.0, 0.0, 0.0
 
         # We do not perform weight update for units that are farther in the neighbourhood of BMU, than the radius of BMU 
         # This mean, we use the radius of BMU as threashold and set distance values of all the units farther than the threshold to be 0 so as to avoid weight update for them
-        modifier = tf.where(self.cartesian_distances[ :, :, bmu[0], bmu[1]] > self.radius[bmu[0], bmu[1]], tf.zeros_like(self.cartesian_distances[ :, :, bmu[0], bmu[1]]), self.cartesian_distances[ :, :, bmu[0], bmu[1]])
-        modifier = tf.tensor_scatter_nd_update(modifier, [bmu], [1])
+        mask = tf.where(self.cartesian_distances[ :, :, bmu[0], bmu[1]] > self.radius[bmu[0], bmu[1]], tf.zeros_like(self.cartesian_distances[ :, :, bmu[0], bmu[1]]), self.cartesian_distances[ :, :, bmu[0], bmu[1]])
+        mask = tf.tensor_scatter_nd_update(mask, [bmu], [1])
 
-        final_modifier = modifier * self.learning_rates * tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] * distance_modifier)
+        final_modifier = mask * self.learning_rates * tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] * distance_modifier)
 
         final_modifier = tf.repeat(final_modifier, repeats=self.shapeY // self.unitsY, axis=1)
         final_modifier = tf.repeat(final_modifier, repeats=self.shapeX // self.unitsX, axis=0)
@@ -142,8 +136,13 @@ class Network(tf.keras.Model):
 
         self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
 
+        # we need some alpha value to update running variance 
         variance_alpha  = (self.running_variance_alpha - 0.5) + 1.0 / (1.0 + tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] / constant))
-        variance_alpha = tf.clip_by_value(variance_alpha, 0.0, 1.0) * modifier
+        
+        # we only update variance of units that are within the range of the radius of our BMU. We obtain this mask from 'modifier' variable
+        # For all the units farther than the radius of BMU, alpha value will be 1.0 because we do not want to update their variance at line 158
+        variance_alpha = variance_alpha * mask + (1 - mask)
+        variance_alpha = tf.clip_by_value(variance_alpha, 0.0, 1.0)
         variance_alpha = tf.repeat(variance_alpha, repeats=self.shapeX // self.unitsX, axis=1)
         variance_alpha = tf.repeat(variance_alpha, repeats=self.shapeY // self.unitsY, axis=0)
         variance_alpha = tf.reshape(variance_alpha, [self.shapeX, self.shapeY])
@@ -167,6 +166,26 @@ class Network(tf.keras.Model):
         tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
         bmu = self.layer2(unit_map)
         self.weight_update(bmu, tiled_input, y)
+
+    def getConfig(self):
+        """
+        Get configuration of this model for saving it
+
+        :return: configuration of the network class
+        :rtype: dict
+        """
+        config = {}
+        config['som'] = self.som
+        config['shapeX'] = self.shapeX
+        config['shapeY'] = self.shapeY
+        config['unitsX'] = self.unitsX
+        config['unitsY'] = self.unitsY
+        config['class_count'] = self.class_count
+        config['running_variance'] = self.running_variance
+        config['radius'] = self.radius
+        config['learning_rates'] = self.learning_rates
+
+        return config
 
 if __name__ == '__main__':
 
@@ -211,4 +230,5 @@ if __name__ == '__main__':
     if not os.path.exists("logs"):
         os.makedirs("logs")
     # save the trained model
-    dataloader.saveModel(network, os.path.join("logs", args.filepath))
+    config = network.getConfig()
+    dataloader.saveModel(config, os.path.join("logs", args.filepath))
