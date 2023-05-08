@@ -10,9 +10,12 @@ author: Hitesh Vaidya
 import tensorflow as tf
 import os
 from layer import CustomDistanceLayer
+from sample import Sample
 import dataloader
 from MinLayer import MinLayer
 import util
+import cv2
+import argparse
 
 class Network(tf.keras.Model):
     """
@@ -73,6 +76,13 @@ class Network(tf.keras.Model):
         self.layer2 = MinLayer(n_units)
 
     def decayRadius(self, bmu):
+        """
+        Decay current radius value of the best matching unit
+
+        :param bmu: best matching unit
+        :type bmu: tuple
+        """
+        # 15 is a constant value (can be changed)
         decay = tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
         self.radius = tf.tensor_scatter_nd_update(self.radius, [bmu], [decay])
         self.radius = tf.math.maximum(0.00001 * tf.ones(
@@ -80,12 +90,29 @@ class Network(tf.keras.Model):
                                         self.radius)
 
     def decayLearningRate(self, bmu):
+        """
+        Decay current learning rate of the best matching unit
+
+        :param bmu: best matching unit
+        :type bmu: tuple
+        """
+        # 25 is a constant value (can be changed)
         decay = tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 25)
         self.learning_rates = tf.tensor_scatter_nd_update(self.learning_rates,
                                                     [bmu], [decay])
         self.learning_rates = tf.math.maximum(0.00001 * tf.ones(
                                         tf.shape(self.learning_rates)), 
                                         self.learning_rates)
+        
+    def visualize_model(self):
+        """
+        Visualize the current state of SOM
+        """
+        # Display current state of SOM
+        cv2.imshow("Self Organizing Map", self.som.numpy())
+        # wait for 1 milli-seconds
+        cv2.waitKey(1)
+
 
     def weight_update(self, bmu, input_matrix, label):
         # create a distance modifier for neighbourhood function
@@ -98,30 +125,32 @@ class Network(tf.keras.Model):
 
         # We do not perform weight update for units that are farther in the neighbourhood of BMU, than the radius of BMU 
         # This mean, we use the radius of BMU as threashold and set distance values of all the units farther than the threshold to be 0 so as to avoid weight update for them
-        modifier = tf.where(self.cartesian_distances[:, :, bmu[0], bmu[1]] > self.radius[bmu[0], bmu[1]], tf.zeros_like(self.radius), self.cartesian_distances[:, :, bmu[0], bmu[1]])
+        modifier = tf.where(self.cartesian_distances[ :, :, bmu[0], bmu[1]] > self.radius[bmu[0], bmu[1]], tf.zeros_like(self.cartesian_distances[ :, :, bmu[0], bmu[1]]), self.cartesian_distances[ :, :, bmu[0], bmu[1]])
+        modifier = tf.tensor_scatter_nd_update(modifier, [bmu], [1])
 
-        final_modifier = self.learning_rates * tf.math.exp(-modifier) * distance_modifier
+        final_modifier = modifier * self.learning_rates * tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] * distance_modifier)
 
         final_modifier = tf.repeat(final_modifier, repeats=self.shapeY // self.unitsY, axis=1)
         final_modifier = tf.repeat(final_modifier, repeats=self.shapeX // self.unitsX, axis=0)
         final_modifier = tf.reshape(final_modifier, [self.shapeX, self.shapeY])
 
-        variance_alpha  = (self.running_variance_alpha - 0.5) + 1.0 / (1.0 + tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] / constant))
-        variance_alpha = tf.clip_by_value(variance_alpha, 0.0, 1.0)
-
         # Perform the weight update
         self.som += final_modifier * (input_matrix - self.som)
 
-        
+        # clip the values of SOM
+        self.som = tf.clip_by_value(self.som, 0.0, 1.0)
+
         self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
 
-        variance_alpha = tf.tile(variance_alpha, [self.shapeX // self.unitsX, self.shapeY // self.unitsY])
+        variance_alpha  = (self.running_variance_alpha - 0.5) + 1.0 / (1.0 + tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] / constant))
+        variance_alpha = tf.clip_by_value(variance_alpha, 0.0, 1.0) * modifier
+        variance_alpha = tf.repeat(variance_alpha, repeats=self.shapeX // self.unitsX, axis=1)
+        variance_alpha = tf.repeat(variance_alpha, repeats=self.shapeY // self.unitsY, axis=0)
+        variance_alpha = tf.reshape(variance_alpha, [self.shapeX, self.shapeY])
+        # variance_alpha = tf.tile(variance_alpha, [self.shapeX // self.unitsX, self.shapeY // self.unitsY])
         
         # Update running variance of SOM
         self.running_variance = variance_alpha * self.running_variance + (1.0 - variance_alpha) * (input_matrix - self.som) * (input_matrix - self.som)
-
-        # clip the values of SOM
-        self.som = tf.clip_by_value(self.som, 0.0, 1.0)
 
         # Decay parameters
         self.decayRadius(bmu)
@@ -137,23 +166,49 @@ class Network(tf.keras.Model):
         """
         tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
         bmu = self.layer2(unit_map)
-        print("bmu index:", bmu)
         self.weight_update(bmu, tiled_input, y)
-        print("weight udpated")
 
 if __name__ == '__main__':
-    # set gpu
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
+    # define parser for command line arguments
+    parser = argparse.ArgumentParser()
+
+    # add command line arguments
+    parser.add_argument('-g', '--gpuid', type=str, default=None, help='gpu id')
+    parser.add_argument('-u', '--units', type=int, required=True, default=10, help='number of units in a row of the SOM')
+    parser.add_argument('-r', '--radius', type=float, required=True, default=None, help='initial radius of every unit in SOM')
+    parser.add_argument('-lr', '--learning_rate', type=float, required=True, default=None, help='initial learning rate of every unit in SOM')
+    parser.add_argument('-va', '--variance_alpha', type=float, required=False, default=0.9, help='initial value of alpha for running variance')
+    parser.add_argument('-v', '--variance', type=float, required=False, default=0.5, help='initial value of running variance')
+    parser.add_argument('-fp', '--filepath', type=str, required=True, default=None, help='filepath for saving trained SOM model')
+    args = parser.parse_args()
+
+    # check if gpu exist
+    if tf.test.is_gpu_available():
+        # set gpu id
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpuid
+   
     # Declare the object of the network
-    network = Network(28, 10, 10, 1.5, 0.7, 0.5, 0.9)
-    # Load the data
-    (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
+    network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
     
     # Perform the forward pass
-    for index in range(x_train.shape[0]):
-        network.forwardPass(x_train[index], y_train[index])
+    for index in range(10):
+        # Load the data
+        class_train_samples = dataloader.loadClassIncremental("../data/mnist/train/", index, 1)
+        
+        # train on current class
+        for index, sample in enumerate(class_train_samples):
+            # print("sample: ", sample)
+            # print("sample value: ", sample.values)
+            network.forwardPass(sample.getImage(), sample.getLabel())
+            network.visualize_model()
+            if index == 100:
+                break
     
+    # Destroy all cv2 windows
+    cv2.destroyAllWindows()
+    
+    if not os.path.exists("logs"):
+        os.makedirs("logs")
     # save the trained model
-    if not os.path.exists('./data'):
-        os.makedirs("./data")
-    dataloader.saveModel(network, "data/trained_som_network.pkl")
+    dataloader.saveModel(network, os.path.join("logs", args.filepath))
