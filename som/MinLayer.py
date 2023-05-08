@@ -39,5 +39,4 @@ class MinLayer(tf.keras.layers.Layer):
         :rtype: array of two elements
         """
         output = tf.argmin(tf.reshape(inputs, [-1]), axis=None).numpy()
-        print('output=',output)
         return [output //inputs.shape[0], output%inputs.shape[1]]
