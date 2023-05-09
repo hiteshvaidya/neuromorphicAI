@@ -37,6 +37,7 @@ class Network(tf.keras.Model):
         :type n_units: int
         """
         super(Network, self).__init__()
+        st = time.time()
         # Total number of pixels in a row and column of SOM
         self.shapeX = imgSize * n_units
         self.shapeY = imgSize * n_units
@@ -45,9 +46,17 @@ class Network(tf.keras.Model):
         self.unitsX = n_units
         self.unitsY = n_units
 
-        # randomly initialize pixels of the SOM
-        self.som = tf.random.normal([self.shapeX, self.shapeY],
-                                    0.1, 0.3)
+        # randomly initialize every unit (n_units * n_units) in the SOM
+        units = []
+        for _ in range(self.unitsX * self.unitsY):
+            current_time = time.time() - st
+            units.append(tf.random.normal([28, 28], mean=0.4, stddev=0.3, seed=current_time))
+        
+        # stack the units along rows and columns or reshape to form the SOM
+        self.som = tf.concat([tf.concat(units_col, axis=1) for units_col in tf.split(units, self.unitsX)], axis=0)
+        # reshape the SOM
+        self.som = tf.reshape(self.som, [self.shapeY, self.shapeX])
+
         # clip values between 0 and 1
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
 
@@ -63,9 +72,11 @@ class Network(tf.keras.Model):
         self.cartesian_distances = util.calculate_distances(n_units, n_units)
         
         # Create a matrix for radius of every unit
+        self.initial_radius = radius
         self.radius = radius * tf.ones([n_units, n_units])
 
         # Create a matrix for learning rate of every unit
+        self.initial_learning_rates = learning_rate
         self.learning_rates = learning_rate * tf.ones([n_units, n_units])
         
         # Declare the layers of the network
@@ -80,7 +91,7 @@ class Network(tf.keras.Model):
         :type bmu: tuple
         """
         # 15 is a constant value (can be changed)
-        decay = tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
+        decay = self.initial_radius * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
         self.radius = tf.tensor_scatter_nd_update(self.radius, [bmu], [decay])
         self.radius = tf.math.maximum(0.00001 * tf.ones(
                                         tf.shape(self.radius)), 
@@ -94,7 +105,7 @@ class Network(tf.keras.Model):
         :type bmu: tuple
         """
         # 25 is a constant value (can be changed)
-        decay = tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 25)
+        decay = self.initial_learning_rates * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 25)
         self.learning_rates = tf.tensor_scatter_nd_update(self.learning_rates,
                                                     [bmu], [decay])
         self.learning_rates = tf.math.maximum(0.00001 * tf.ones(
@@ -115,7 +126,7 @@ class Network(tf.keras.Model):
         Display the running variance values of all SOM units
         """
         cv2.imshow("SOM variance", self.running_variance.numpy())
-        cv2.waitkey(1)
+        cv2.waitKey(1)
     
     def saveImage(self, folder_path, index):
         """
@@ -217,7 +228,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # add command line arguments
-    parser.add_argument('-g', '--gpuid', type=str, default=None, help='gpu id')
+    parser.add_argument('-g', '--gpuid', type=int, default=None, help='gpu id')
     parser.add_argument('-u', '--units', type=int, required=True, default=10, help='number of units in a row of the SOM')
     parser.add_argument('-r', '--radius', type=float, required=True, default=None, help='initial radius of every unit in SOM')
     parser.add_argument('-lr', '--learning_rate', type=float, required=True, default=None, help='initial learning rate of every unit in SOM')
@@ -226,10 +237,16 @@ if __name__ == '__main__':
     parser.add_argument('-fp', '--filepath', type=str, required=True, default=None, help='filepath for saving trained SOM model')
     args = parser.parse_args()
 
-    # check if gpu exist
-    if tf.test.is_gpu_available():
-        # set gpu id
-        os.environ["CUDA_VISIBLE_DEVICES"] = args.gpuid
+    # Set the GPU to be used
+    physical_devices = tf.config.list_physical_devices('GPU')
+    if physical_devices:
+        tf.config.experimental.set_memory_growth(physical_devices[args.gpuid], True)
+        tf.config.set_visible_devices(physical_devices[args.gpuid], 'GPU')
+
+    # Verify that the GPU is set
+    print("GPU devices:")
+    for device in tf.config.list_physical_devices('GPU'):
+        print(device)
    
     # create 'logs' folder
     if not os.path.exists("logs"):
@@ -254,15 +271,17 @@ if __name__ == '__main__':
             network.forwardPass(sample.getImage(), sample.getLabel())
             # network.visualize_model()
             # network.displayVariance()
+            # if cursor == 10:
+            #     break
         
         # save the image of current state of SOM
         network.saveImage(folder_path, index)
 
-    execution_time = time.time() - start_time
+    execution_time = (time.time() - start_time) / 60.0
     # Destroy all cv2 windows
     # cv2.destroyAllWindows()
 
-    print(f"total execution time = {execution_time} seconds" )    
+    print(f"total execution time = {execution_time} minutes" )    
 
     # save the trained model
     config = network.getConfig()
