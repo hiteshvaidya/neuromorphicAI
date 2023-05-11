@@ -1,4 +1,3 @@
-
 """
 testClass.py
 
@@ -99,64 +98,49 @@ if __name__ == '__main__':
     print(test.predicted_class)
     # print(test.class_count)
 
-    # Define the shape of the input image
-    image_shape = (28, 28)
 
-    # Define the shape of the feature map
-    feature_map_shape = (560, 560)
+    # Define the input shapes of the three matrices
+    input_shape1 = (28, 28, 1)
+    input_shape2 = (560, 560, 1)
+    input_shape3 = (560, 560, 1)
 
-    # Define the input layer for the input image
-    input_image = layers.Input(shape=image_shape)
+    # Define the input layers for the three matrices
+    input1 = tf.keras.layers.Input(shape=input_shape1)
+    input2 = tf.keras.layers.Input(shape=input_shape2)
+    input3 = tf.keras.layers.Input(shape=input_shape3)
 
-    # Define the input layer for the feature map
-    feature_map = layers.Input(shape=feature_map_shape)
-    
-    # Reshape the feature map into submatrices of size (28, 28)
-    submatrices = layers.Reshape((feature_map_shape[0]//image_shape[0],
-                                  feature_map_shape[1]//image_shape[1],
-                                  image_shape[0],
-                                  image_shape[1]))(feature_map)
-    print(submatrices)
-    # Flatten the input image
-    input_image_flat = layers.Flatten()(input_image)
-    input_image_flat_reshaped = tf.expand_dims(input_image_flat, axis=1)
+    # Define the convolution layers to process the two inputs
+    conv1 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+    conv2 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
 
-    # Flatten the submatrices of the feature map
-    submatrices_flat = layers.Reshape((-1, image_shape[0]*image_shape[1]))(submatrices)
-    print(input_image_flat_reshaped)
-    print(submatrices_flat)
-    # Calculate cosine similarity using dot product and L2 normalization
-    dot_product = layers.Dot(axes=2, normalize=True)([input_image_flat_reshaped, submatrices_flat])
+    # Apply the convolution layers to the input matrices
+    x1 = conv1(input1)
+    x2 = conv2(input2)
 
-    # Reshape the cosine similarity results back to the original submatrices shape
-    cosine_similarity = layers.Reshape((feature_map_shape[0]//image_shape[0],
-                                        feature_map_shape[1]//image_shape[1]))(dot_product)
+    # Flatten the output of the convolution layers
+    x1 = tf.keras.layers.Flatten()(x1)
+    x2 = tf.keras.layers.Flatten()(x2)
 
-    # Get the argmax on the indices
-    argmax_indices = layers.Lambda(lambda x: tf.argmax(x, axis=-1))(cosine_similarity)
-    argmax_indices = tf.reshape(argmax_indices, [-1, 20, 1])
+    # Compute the cosine similarity between the two flattened feature vectors
+    dot_product = tf.keras.layers.Dot(axes=1, normalize=True)([x1, x2])
 
-    # Gather the values from the predicted_labels matrix based on the argmax indices
-    predicted_labels = layers.Input(shape=(feature_map_shape[0]//image_shape[0],
-                                           feature_map_shape[1]//image_shape[1]))  # Placeholder for the predicted_labels matrix
-    selected_values = layers.Lambda(lambda x: tf.gather_nd(x[0], x[1]))([predicted_labels, argmax_indices])
+    # Perform an argmax on the resulting vector
+    max_index = tf.keras.layers.Lambda(lambda x: tf.argmax(x, axis=-1))(dot_product)
 
-    # Create the Keras model
-    model = tf.keras.Model(inputs=[input_image, feature_map, predicted_labels], outputs=selected_values)
+    # Use max_index to find the corresponding value in input3
+    output = tf.gather(input3, max_index, axis=0, batch_dims=0)
 
-    # Compile the model (add loss, optimizer, etc.)
-    model.compile(optimizer='adam', loss='mse', metrics=['accuracy'])
+    # Define the model with the input and output layers
+    model = tf.keras.models.Model(inputs=[input1, input2, input3], outputs=output)
 
     # Print the model summary
     model.summary()
 
     (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
+    # myModel = model(x_train[0], som, test.predicted_class)
 
-    # myModel = model(x_test[0], som, test.predicted_class)
-
-    print("Model compatible for Akida conversion:",
-      check_model_compatibility(model))
-
+    #print("Model compatible for Akida conversion:",
+    #  check_model_compatibility(test))
     ## Load the data
     #(x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
 
