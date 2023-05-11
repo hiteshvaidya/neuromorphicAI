@@ -1,3 +1,4 @@
+
 """
 testClass.py
 
@@ -15,6 +16,7 @@ from MaxLayer import MaxLayer
 import dataloader
 from cnn2snn import check_model_compatibility
 import pickle
+from tensorflow.keras import layers
 
 with open('C:/Users/USER/source/repos/som/som/logs/trial-1/model_config.pkl', 'rb') as file:
     som_model = pickle.load(file)
@@ -62,19 +64,6 @@ class testClass(tf.keras.Model):
         # Declare the layers of the network
         self.layer1 = CosineDistanceLayer(self.shapeX * self.shapeY, self.unitsX)
         self.layer2 = MaxLayer(self.unitsX)
-
-    # @tf.function
-    def InferencePass(self, x):
-        """
-        Inference pass through the network
-
-        :param x: input image
-        :type x: matrix of float values
-        """
-        x = self.layer1(self.som, x)
-        x = self.layer2(x)
-        print("max value:", x)
-        return x
         
     def getPredictedClass(self, x):
         predictedClass = tf.gather(tf.gather(self.predicted_class, x[0]), x[1])
@@ -110,8 +99,64 @@ if __name__ == '__main__':
     print(test.predicted_class)
     # print(test.class_count)
 
+    # Define the shape of the input image
+    image_shape = (28, 28)
+
+    # Define the shape of the feature map
+    feature_map_shape = (560, 560)
+
+    # Define the input layer for the input image
+    input_image = layers.Input(shape=image_shape)
+
+    # Define the input layer for the feature map
+    feature_map = layers.Input(shape=feature_map_shape)
+    
+    # Reshape the feature map into submatrices of size (28, 28)
+    submatrices = layers.Reshape((feature_map_shape[0]//image_shape[0],
+                                  feature_map_shape[1]//image_shape[1],
+                                  image_shape[0],
+                                  image_shape[1]))(feature_map)
+    print(submatrices)
+    # Flatten the input image
+    input_image_flat = layers.Flatten()(input_image)
+    input_image_flat_reshaped = tf.expand_dims(input_image_flat, axis=1)
+
+    # Flatten the submatrices of the feature map
+    submatrices_flat = layers.Reshape((-1, image_shape[0]*image_shape[1]))(submatrices)
+    print(input_image_flat_reshaped)
+    print(submatrices_flat)
+    # Calculate cosine similarity using dot product and L2 normalization
+    dot_product = layers.Dot(axes=2, normalize=True)([input_image_flat_reshaped, submatrices_flat])
+
+    # Reshape the cosine similarity results back to the original submatrices shape
+    cosine_similarity = layers.Reshape((feature_map_shape[0]//image_shape[0],
+                                        feature_map_shape[1]//image_shape[1]))(dot_product)
+
+    # Get the argmax on the indices
+    argmax_indices = layers.Lambda(lambda x: tf.argmax(x, axis=-1))(cosine_similarity)
+    argmax_indices = tf.reshape(argmax_indices, [-1, 20, 1])
+
+    # Gather the values from the predicted_labels matrix based on the argmax indices
+    predicted_labels = layers.Input(shape=(feature_map_shape[0]//image_shape[0],
+                                           feature_map_shape[1]//image_shape[1]))  # Placeholder for the predicted_labels matrix
+    selected_values = layers.Lambda(lambda x: tf.gather_nd(x[0], x[1]))([predicted_labels, argmax_indices])
+
+    # Create the Keras model
+    model = tf.keras.Model(inputs=[input_image, feature_map, predicted_labels], outputs=selected_values)
+
+    # Compile the model (add loss, optimizer, etc.)
+    model.compile(optimizer='adam', loss='mse', metrics=['accuracy'])
+
+    # Print the model summary
+    model.summary()
+
+    (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
+
+    # myModel = model(x_test[0], som, test.predicted_class)
+
     print("Model compatible for Akida conversion:",
-      check_model_compatibility(test))
+      check_model_compatibility(model))
+
     ## Load the data
     #(x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
 

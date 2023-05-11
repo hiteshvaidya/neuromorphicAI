@@ -15,6 +15,7 @@ from MaxLayer import MaxLayer
 import dataloader
 from cnn2snn import check_model_compatibility
 import pickle
+from tensorflow.keras import layers
 
 with open('C:/Users/USER/source/repos/som/som/logs/trial-1/model_config.pkl', 'rb') as file:
     som_model = pickle.load(file)
@@ -62,19 +63,6 @@ class testClass(tf.keras.Model):
         # Declare the layers of the network
         self.layer1 = CosineDistanceLayer(self.shapeX * self.shapeY, self.unitsX)
         self.layer2 = MaxLayer(self.unitsX)
-
-    # @tf.function
-    def InferencePass(self, x):
-        """
-        Inference pass through the network
-
-        :param x: input image
-        :type x: matrix of float values
-        """
-        x = self.layer1(self.som, x)
-        x = self.layer2(x)
-        print("max value:", x)
-        return x
         
     def getPredictedClass(self, x):
         predictedClass = tf.gather(tf.gather(self.predicted_class, x[0]), x[1])
@@ -110,8 +98,49 @@ if __name__ == '__main__':
     print(test.predicted_class)
     # print(test.class_count)
 
-    print("Model compatible for Akida conversion:",
-      check_model_compatibility(test))
+
+    # Define the input shapes of the three matrices
+    input_shape1 = (28, 28, 1)
+    input_shape2 = (560, 560, 1)
+    input_shape3 = (560, 560, 1)
+
+    # Define the input layers for the three matrices
+    input1 = tf.keras.layers.Input(shape=input_shape1)
+    input2 = tf.keras.layers.Input(shape=input_shape2)
+    input3 = tf.keras.layers.Input(shape=input_shape3)
+
+    # Define the convolution layers to process the two inputs
+    conv1 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+    conv2 = tf.keras.layers.Conv2D(32, (3, 3), activation='relu')
+
+    # Apply the convolution layers to the input matrices
+    x1 = conv1(input1)
+    x2 = conv2(input2)
+
+    # Flatten the output of the convolution layers
+    x1 = tf.keras.layers.Flatten()(x1)
+    x2 = tf.keras.layers.Flatten()(x2)
+
+    # Compute the cosine similarity between the two flattened feature vectors
+    dot_product = tf.keras.layers.Dot(axes=1, normalize=True)([x1, x2])
+
+    # Perform an argmax on the resulting vector
+    max_index = tf.keras.layers.Lambda(lambda x: tf.argmax(x, axis=-1))(dot_product)
+
+    # Use max_index to find the corresponding value in input3
+    output = tf.gather(input3, max_index, axis=0, batch_dims=0)
+
+    # Define the model with the input and output layers
+    model = tf.keras.models.Model(inputs=[input1, input2, input3], outputs=output)
+
+    # Print the model summary
+    model.summary()
+
+    (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
+    # myModel = model(x_train[0], som, test.predicted_class)
+
+    #print("Model compatible for Akida conversion:",
+    #  check_model_compatibility(test))
     ## Load the data
     #(x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
 
