@@ -1,4 +1,5 @@
 
+
 """
 testClass.py
 
@@ -20,6 +21,43 @@ from tensorflow.keras import layers
 
 with open('C:/Users/USER/source/repos/som/som/logs/trial-1/model_config.pkl', 'rb') as file:
     som_model = pickle.load(file)
+
+class MyCustomLayer(layers.Layer):
+    def __init__(self, som_units, predicted_labels, **kwargs):
+        super(MyCustomLayer, self).__init__(**kwargs)
+        self.weight_matrix = som_units
+        self.predicted_labels = predicted_labels
+
+    def build(self, input_shape):
+        # Define the weights or any additional variables needed for your layer
+        self.my_variable = self.add_weight(shape=(input_shape[1],), initializer='random_normal', trainable=True)
+
+    def call(self, inputs):
+        # Reshape the input image to (1, 28*28) for batch multiplication
+        input_image = tf.reshape(inputs, (1, -1))
+
+        # Reshape the weight matrix to have submatrices of shape (28*28, 28*28)
+        weight_submatrices = tf.image.extract_patches(
+            images=tf.expand_dims(self.weight_matrix, axis=0),
+            sizes=[1, 28, 28, 1],
+            strides=[1, 28, 28, 1],
+            rates=[1, 1, 1, 1],
+            padding='VALID'
+        )
+        print("weight_submatrices: ", weight_submatrices.shape)
+        weight_submatrices = tf.reshape(weight_submatrices, (-1, 28*28))
+
+        # Compute the cosine similarity between the input image and each weight submatrix
+        similarity = tf.keras.losses.CosineSimilarity(axis=1)(input_image, weight_submatrices)
+
+        # Find the index of the weight submatrix with the maximum cosine similarity
+        argmax_index = tf.argmax(similarity)
+
+        # Get the corresponding value from the predicted_labels matrix
+        predicted_label = self.predicted_labels[argmax_index / self.predicted_labels.shape[0], argmax_index % self.predicted_labels[1]]
+
+        return predicted_label
+
 
 class testClass(tf.keras.Model):
     """
@@ -116,15 +154,14 @@ if __name__ == '__main__':
                                   feature_map_shape[1]//image_shape[1],
                                   image_shape[0],
                                   image_shape[1]))(feature_map)
-    print(submatrices)
+
     # Flatten the input image
     input_image_flat = layers.Flatten()(input_image)
     input_image_flat_reshaped = tf.expand_dims(input_image_flat, axis=1)
 
     # Flatten the submatrices of the feature map
     submatrices_flat = layers.Reshape((-1, image_shape[0]*image_shape[1]))(submatrices)
-    print(input_image_flat_reshaped)
-    print(submatrices_flat)
+
     # Calculate cosine similarity using dot product and L2 normalization
     dot_product = layers.Dot(axes=2, normalize=True)([input_image_flat_reshaped, submatrices_flat])
 
@@ -141,8 +178,11 @@ if __name__ == '__main__':
                                            feature_map_shape[1]//image_shape[1]))  # Placeholder for the predicted_labels matrix
     selected_values = layers.Lambda(lambda x: tf.gather_nd(x[0], x[1]))([predicted_labels, argmax_indices])
 
+    inference_layer = MyCustomLayer(som, predicted_labels=test.predicted_class)
+    output = inference_layer(input_image)
     # Create the Keras model
-    model = tf.keras.Model(inputs=[input_image, feature_map, predicted_labels], outputs=selected_values)
+    # model = tf.keras.Model(inputs=[input_image, feature_map, predicted_labels], outputs=selected_values)
+    model = tf.keras.Model(inputs=input_image, outputs=output)
 
     # Compile the model (add loss, optimizer, etc.)
     model.compile(optimizer='adam', loss='mse', metrics=['accuracy'])

@@ -96,7 +96,7 @@ if __name__ == '__main__':
     
     test = testClass(som, shapeX, shapeY, unitsX, unitsY, class_count, 10)
     test.setPredictedClass()
-    print(test.predicted_class)
+    # print(test.predicted_class)
     # print(test.class_count)
 
     # Define the shape of the input image
@@ -106,43 +106,46 @@ if __name__ == '__main__':
     feature_map_shape = (560, 560)
 
     # Define the input layer for the input image
-    input_image = layers.Input(shape=image_shape)
-
-    # Define the input layer for the feature map
-    feature_map = layers.Input(shape=feature_map_shape)
-    
+    input_image = tf.keras.Input(shape=image_shape, name='input_image')
+    print(input_image.shape)
+    # Define the variable for the feature map
+    feature_map = tf.Variable(tf.zeros(feature_map_shape), name='feature_map')
+    print(feature_map.shape)
+    # Define the variable for the predicted labels
+    predicted_labels = tf.Variable(tf.zeros((feature_map_shape[0]//image_shape[0], feature_map_shape[1]//image_shape[1])), name='predicted_labels')
+    print(predicted_labels.shape)
     # Reshape the feature map into submatrices of size (28, 28)
-    submatrices = layers.Reshape((feature_map_shape[0]//image_shape[0],
-                                  feature_map_shape[1]//image_shape[1],
-                                  image_shape[0],
-                                  image_shape[1]))(feature_map)
-    print(submatrices)
+    submatrices = tf.reshape(feature_map, (-1, feature_map_shape[0]//image_shape[0],
+                                           feature_map_shape[1]//image_shape[1],
+                                           image_shape[0],
+                                           image_shape[1]))
+    print(submatrices.shape)
     # Flatten the input image
-    input_image_flat = layers.Flatten()(input_image)
-    input_image_flat_reshaped = tf.expand_dims(input_image_flat, axis=1)
+    input_image_flat = tf.keras.layers.Flatten()(input_image)
+    print(input_image_flat.shape)
+    # input_image_flat_reshaped = tf.expand_dims(input_image_flat, axis=1)
 
     # Flatten the submatrices of the feature map
-    submatrices_flat = layers.Reshape((-1, image_shape[0]*image_shape[1]))(submatrices)
-    print(input_image_flat_reshaped)
-    print(submatrices_flat)
-    # Calculate cosine similarity using dot product and L2 normalization
-    dot_product = layers.Dot(axes=2, normalize=True)([input_image_flat_reshaped, submatrices_flat])
+    submatrices_flat = tf.reshape(submatrices, (400, image_shape[0]*image_shape[1]))
 
+    print(submatrices_flat.shape)
+    # Calculate cosine similarity using dot product and L2 normalization
+    # dot_product = tf.keras.layers.Dot(axes=2, normalize=True)([input_image_flat_reshaped, submatrices_flat])
+    dot_product = tf.keras.layers.Dot(axes=-1, normalize=True)([input_image_flat, submatrices_flat])
+    print(dot_product.shape)
     # Reshape the cosine similarity results back to the original submatrices shape
-    cosine_similarity = layers.Reshape((feature_map_shape[0]//image_shape[0],
-                                        feature_map_shape[1]//image_shape[1]))(dot_product)
+    cosine_similarity = tf.reshape(dot_product, (feature_map_shape[0]//image_shape[0],
+                                                 feature_map_shape[1]//image_shape[1]))
 
     # Get the argmax on the indices
-    argmax_indices = layers.Lambda(lambda x: tf.argmax(x, axis=-1))(cosine_similarity)
+    argmax_indices = tf.keras.layers.Lambda(lambda x: tf.argmax(x, axis=-1))(cosine_similarity)
     argmax_indices = tf.reshape(argmax_indices, [-1, 20, 1])
 
     # Gather the values from the predicted_labels matrix based on the argmax indices
-    predicted_labels = layers.Input(shape=(feature_map_shape[0]//image_shape[0],
-                                           feature_map_shape[1]//image_shape[1]))  # Placeholder for the predicted_labels matrix
-    selected_values = layers.Lambda(lambda x: tf.gather_nd(x[0], x[1]))([predicted_labels, argmax_indices])
+    selected_values = tf.keras.layers.Lambda(lambda x: tf.gather_nd(x[0], x[1]))([predicted_labels, argmax_indices])
 
-    # Create the Keras model
-    model = tf.keras.Model(inputs=[input_image, feature_map, predicted_labels], outputs=selected_values)
+    # Define the model
+    model = tf.keras.Model(inputs=[input_image], outputs=selected_values)
 
     # Compile the model (add loss, optimizer, etc.)
     model.compile(optimizer='adam', loss='mse', metrics=['accuracy'])
@@ -174,3 +177,4 @@ if __name__ == '__main__':
 
     ## step 3: calculate accuracy
     #runningAccuracy = test.getAccuracy(y_pred, y_test)
+
