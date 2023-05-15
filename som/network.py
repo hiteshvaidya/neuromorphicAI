@@ -18,6 +18,7 @@ import cv2
 import time
 import numpy as np
 import argparse
+from testing2 import testClass
 from tqdm import tqdm
 
 class Network(tf.keras.Model):
@@ -228,7 +229,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     # add command line arguments
-    parser.add_argument('-g', '--gpuid', type=int, default=None, help='gpu id')
+    parser.add_argument('-g', '--gpuid', type=str, default=None, help='gpu id')
     parser.add_argument('-u', '--units', type=int, required=True, default=10, help='number of units in a row of the SOM')
     parser.add_argument('-r', '--radius', type=float, required=True, default=None, help='initial radius of every unit in SOM')
     parser.add_argument('-lr', '--learning_rate', type=float, required=True, default=None, help='initial learning rate of every unit in SOM')
@@ -238,15 +239,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # Set the GPU to be used
-    physical_devices = tf.config.list_physical_devices('GPU')
-    if physical_devices:
-        tf.config.experimental.set_memory_growth(physical_devices[args.gpuid], True)
-        tf.config.set_visible_devices(physical_devices[args.gpuid], 'GPU')
-
-    # Verify that the GPU is set
-    print("GPU devices:")
-    for device in tf.config.list_physical_devices('GPU'):
-        print(device)
+    # physical_devices = tf.config.list_physical_devices('GPU')
+    # if physical_devices:
+    #     tf.config.experimental.set_memory_growth(physical_devices[args.gpuid], True)
+    #     tf.config.set_visible_devices(physical_devices[args.gpuid], 'GPU')
+    # set gpu
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpuid
    
     # create 'logs' folder
     if not os.path.exists("logs"):
@@ -255,34 +253,63 @@ if __name__ == '__main__':
     folder_path = os.path.join(os.getcwd(), 'logs', args.filepath)
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
+    print("folder_path: ", folder_path)
 
-    # Declare the object of the network
-    network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
+    # # Declare the object of the network
+    # network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
 
-    start_time = time.time()
-    # Perform the forward pass
-    for index in range(10):
-        # Load the data
-        class_train_samples = dataloader.loadClassIncremental("../data/mnist/train/", index, 1)
+    # start_time = time.time()
+    # # Perform the forward pass
+    # for index in range(10):
+    #     # Load the data
+    #     class_train_samples = dataloader.loadClassIncremental("../data/mnist/train/", index, 1)
         
-        # train on current class
-        tqdm.write("current class " + str(index))
-        for cursor, sample in tqdm(enumerate(class_train_samples)):
-            network.forwardPass(sample.getImage(), sample.getLabel())
-            # network.visualize_model()
-            # network.displayVariance()
-            # if cursor == 10:
-            #     break
+    #     # train on current class
+    #     tqdm.write("current class " + str(index))
+    #     for cursor, sample in tqdm(enumerate(class_train_samples)):
+    #         network.forwardPass(sample.getImage(), sample.getLabel())
+    #         # network.visualize_model()
+    #         # network.displayVariance()
+    #         # if cursor == 10:
+    #         #     break
         
-        # save the image of current state of SOM
-        network.saveImage(folder_path, index)
+    #     # save the image of current state of SOM
+    #     network.saveImage(folder_path, index)
 
-    execution_time = (time.time() - start_time) / 60.0
-    # Destroy all cv2 windows
-    # cv2.destroyAllWindows()
+    # execution_time = (time.time() - start_time) / 60.0
+    # # Destroy all cv2 windows
+    # # cv2.destroyAllWindows()
 
-    print(f"total execution time = {execution_time} minutes" )    
+    # print(f"total execution time = {execution_time} minutes" )    
 
-    # save the trained model
-    config = network.getConfig()
-    dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
+    # # save the trained model
+    # config = network.getConfig()
+    # dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
+
+
+    test_config = dataloader.loadModel(os.path.join(folder_path, 
+                                                    'model_config.pkl'))
+    test_model = testClass(test_config['som'], 
+                     test_config['shapeX'], 
+                     test_config['shapeY'], 
+                     test_config['unitsX'], 
+                     test_config['unitsY'], 
+                     test_config['class_count'], 
+                     10)
+    test_model.setPredictedClass()
+    print("model and class predictions loaded")
+
+    (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
+    predictions = []
+    tqdm.write("measuring test accuracy")
+    for index in tqdm(range(y_test.shape[0])):
+        feature_map = test_model.layer1(test_config['som'], x_test[index])
+        bmu = test_model.layer2(feature_map)
+        output = test_model.getPredictedClass(bmu)
+        predictions.append(output)
+    predictions = tf.cast(tf.concat(predictions, axis=0), dtype=tf.float32)
+    y_test = tf.cast(y_test, dtype=tf.float32)
+    print(f"predictions: {predictions.shape}, y_Test: {y_test.shape}")
+    
+    accuracy = test_model.getAccuracy(predictions, y_test)
+    print("accuracy = ", accuracy)

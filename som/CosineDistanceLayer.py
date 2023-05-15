@@ -37,7 +37,7 @@ class CosineDistanceLayer(tf.keras.layers.Layer):
                                     trainable=False)
         super(CosineDistanceLayer, self).build(input_shapes)
         
-    def call(self, som_matrix, kernel):
+    def call(self, som_matrix, input):
         """
         This function calculates the distance between the SOM matrix and the input image using the cosine similarity.
         We get an output matrix of the size of [number_of_units, number_of_units] where each index contains the cosine similarity value between the input image and the pixels of the corresponding unit.
@@ -46,21 +46,17 @@ class CosineDistanceLayer(tf.keras.layers.Layer):
         :type som_matrix: tensor of float values
         :param som_running_variances: matrix of running variance
         :type som_running_variances: tensor of float values
-        :param kernel: input image
-        :type kernel: matrix of float values
+        :param input: input image
+        :type input: matrix of float values
         :return: matrix of distance values
         :rtype: tensor of float values
         """
-        # Repeat the input image as per the number of units in a single row or column of the SOM to form one single matrix of the size of the SOM
-        self.kernel = tf.tile(kernel, [self.tile_shape, self.tile_shape])
-
-        # Obtain a matrix of element-wise distance values using running variance of every pixel in the SOM
-        distance_matrix = util.cosine_similarity(self.kernel, som_matrix)
-        
         # expand dimensions of distance matrix to [1, num_pixels, num_pixles, 1]
-        distance_matrix = tf.expand_dims(tf.expand_dims(distance_matrix, axis=0), axis=-1)
+        som_matrix = tf.expand_dims(tf.expand_dims(som_matrix, axis=0), axis=-1)
+
+
         # Extract patches from the distance_matrix using the size of kernel
-        patches = tf.image.extract_patches(images=distance_matrix,
+        patches = tf.image.extract_patches(images=som_matrix,
                                            sizes=[1, self.kernel_size, 
                                                   self.kernel_size, 1], 
                                            strides=[1, self.kernel_size, self.kernel_size, 1], 
@@ -71,8 +67,10 @@ class CosineDistanceLayer(tf.keras.layers.Layer):
         patches = tf.squeeze(patches)
         # Reshape the patches to a 2D tensor where each row corresponds to a patch and each column to a pixel value        
         patches = tf.reshape(patches, [-1, self.kernel_size * self.kernel_size])
-        # Add pixel-wise distance for every unit
-        patches = tf.reduce_sum(patches, axis=1)
+        
+        input = tf.reshape(input, [1, -1])
+        patches = util.cosine_similarity(patches, input)
+
         # reshape patches to [num_units_in_SOM, num_units_in_SOM]
         patches = tf.reshape(patches, [self.tile_shape, self.tile_shape])
         

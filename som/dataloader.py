@@ -30,6 +30,16 @@ def saveModel(object, filepath):
     """
     pkl.dump(object, open(filepath, 'wb'))
 
+def loadModel(filepath):
+    """
+    load the model from a location in pickle format
+
+    :param filepath: save location
+    :type filepath: str
+    """
+    object = pkl.load(open(filepath, 'rb'))
+    return object
+
 def loadSplitData(path, class_number):
     """
     Load class specific data

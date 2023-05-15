@@ -28,7 +28,7 @@ def calculate_distances(rows, cols):
 
 def cosine_similarity(tensor1, tensor2):
     """
-    calculate cosine similarity between two tensors
+    calculate row-wise cosine similarity between two tensors
 
     :param tensor1: first tensor
     :type tensor1: tf.float32
@@ -37,17 +37,12 @@ def cosine_similarity(tensor1, tensor2):
     :return: cosine similarity value
     :rtype: tf.float32
     """
+    # Normalize matrix 1 and matrix 2
+    normalized_matrix1 = tf.linalg.normalize(tensor1, axis=1)[0]
+    normalized_matrix2 = tf.linalg.normalize(tensor2, axis=1)[0]
     # calculate dot product of two tensors
-    dot_product = tf.reduce_sum(tf.multiply(tensor1, tensor2))
-
-    # calculate l2 norm of two tensors
-    norm1 = tf.sqrt(tf.reduce_sum(tf.square(tensor1)))
-    norm2 = tf.sqrt(tf.reduce_sum(tf.square(tensor2)))
-
-    # calculate cosine similarity
-    cosine_similarity = dot_product / (norm1 * norm2)
-
-    return cosine_similarity
+    dot_product = tf.reduce_sum(tf.multiply(normalized_matrix1, normalized_matrix2), axis=1)
+    return dot_product
 
 def variance_distance(sample, som_unit_values, som_unit_variances):
     """

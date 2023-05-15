@@ -18,8 +18,6 @@ from cnn2snn import check_model_compatibility
 import pickle
 from tensorflow.keras import layers
 
-with open('C:/Users/USER/source/repos/som/som/logs/trial-1/model_config.pkl', 'rb') as file:
-    som_model = pickle.load(file)
 
 class testClass(tf.keras.Model):
     """
@@ -62,7 +60,8 @@ class testClass(tf.keras.Model):
         self.class_count = class_count
 
         # Declare the layers of the network
-        self.layer1 = CosineDistanceLayer(self.shapeX * self.shapeY, self.unitsX)
+        self.layer1 = CosineDistanceLayer(self.shapeX // self.unitsX,
+                                            self.unitsX)
         self.layer2 = MaxLayer(self.unitsX)
         
     def getPredictedClass(self, x):
