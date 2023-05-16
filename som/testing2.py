@@ -14,7 +14,7 @@ import os
 from CosineDistanceLayer import CosineDistanceLayer
 from MaxLayer import MaxLayer
 import dataloader
-from cnn2snn import check_model_compatibility
+# from cnn2snn import check_model_compatibility
 import pickle
 from tensorflow.keras import layers
 
