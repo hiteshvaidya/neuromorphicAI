@@ -236,6 +236,7 @@ if __name__ == '__main__':
     parser.add_argument('-va', '--variance_alpha', type=float, required=False, default=0.9, help='initial value of alpha for running variance')
     parser.add_argument('-v', '--variance', type=float, required=False, default=0.5, help='initial value of running variance')
     parser.add_argument('-fp', '--filepath', type=str, required=True, default=None, help='filepath for saving trained SOM model')
+    parser.add_argument('-d', '--dataset', type=str, default=None, help='dataset type mnist/fashion/kmnist/cifar')
     args = parser.parse_args()
 
     # Set the GPU to be used
@@ -244,7 +245,7 @@ if __name__ == '__main__':
     #     tf.config.experimental.set_memory_growth(physical_devices[args.gpuid], True)
     #     tf.config.set_visible_devices(physical_devices[args.gpuid], 'GPU')
     # set gpu
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpuid
+    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpuid
    
     # create 'logs' folder
     if not os.path.exists("logs"):
@@ -255,36 +256,36 @@ if __name__ == '__main__':
         os.makedirs(folder_path)
     print("folder_path: ", folder_path)
 
-    # # Declare the object of the network
-    # network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
+    # Declare the object of the network
+    network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
 
-    # start_time = time.time()
-    # # Perform the forward pass
-    # for index in range(10):
-    #     # Load the data
-    #     class_train_samples = dataloader.loadClassIncremental("../data/mnist/train/", index, 1)
+    start_time = time.time()
+    # Perform the forward pass
+    for index in range(10):
+        # Load the data
+        class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 1)
         
-    #     # train on current class
-    #     tqdm.write("current class " + str(index))
-    #     for cursor, sample in tqdm(enumerate(class_train_samples)):
-    #         network.forwardPass(sample.getImage(), sample.getLabel())
-    #         # network.visualize_model()
-    #         # network.displayVariance()
-    #         # if cursor == 10:
-    #         #     break
+        # train on current class
+        tqdm.write("current class " + str(index))
+        for cursor, sample in tqdm(enumerate(class_train_samples)):
+            network.forwardPass(sample.getImage(), sample.getLabel())
+            # network.visualize_model()
+            # network.displayVariance()
+            # if cursor == 10:
+            #     break
         
-    #     # save the image of current state of SOM
-    #     network.saveImage(folder_path, index)
+        # save the image of current state of SOM
+        network.saveImage(folder_path, index)
 
-    # execution_time = (time.time() - start_time) / 60.0
-    # # Destroy all cv2 windows
-    # # cv2.destroyAllWindows()
+    execution_time = (time.time() - start_time) / 60.0
+    # Destroy all cv2 windows
+    # cv2.destroyAllWindows()
 
-    # print(f"total execution time = {execution_time} minutes" )    
+    print(f"total execution time = {execution_time} minutes" )    
 
-    # # save the trained model
-    # config = network.getConfig()
-    # dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
+    # save the trained model
+    config = network.getConfig()
+    dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
 
 
     test_config = dataloader.loadModel(os.path.join(folder_path, 
@@ -299,17 +300,20 @@ if __name__ == '__main__':
     test_model.setPredictedClass()
     print("model and class predictions loaded")
 
-    (x_train, y_train), (x_test, y_test) = dataloader.loadmnist()
+    test_samples = dataloader.loadNistTestData("../data/" + args.dataset + "fashion/test")
     predictions = []
+    labels = []
     tqdm.write("measuring test accuracy")
-    for index in tqdm(range(y_test.shape[0])):
-        feature_map = test_model.layer1(test_config['som'], x_test[index])
+    for sample in tqdm(test_samples): 
+        feature_map = test_model.layer1(test_config['som'], sample.getImage())
         bmu = test_model.layer2(feature_map)
         output = test_model.getPredictedClass(bmu)
         predictions.append(output)
-    predictions = tf.cast(tf.concat(predictions, axis=0), dtype=tf.float32)
+        labels.append(sample.getLabel())
+    predictions = tf.stack(predictions)
     y_test = tf.cast(y_test, dtype=tf.float32)
-    print(f"predictions: {predictions.shape}, y_Test: {y_test.shape}")
     
-    accuracy = test_model.getAccuracy(predictions, y_test)
+    accuracy = test_model.getAccuracy(predictions, y_test) * 100
     print("accuracy = ", accuracy)
+
+    dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
