@@ -18,7 +18,7 @@ import cv2
 import time
 import numpy as np
 import argparse
-from testing2 import testClass
+from testSOM import testClass
 from tqdm import tqdm
 
 class Network(tf.keras.Model):
@@ -92,7 +92,8 @@ class Network(tf.keras.Model):
         :type bmu: tuple
         """
         # 15 is a constant value (can be changed)
-        decay = self.initial_radius * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
+        # decay = self.initial_radius * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
+        decay = self.radius[bmu] * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
         self.radius = tf.tensor_scatter_nd_update(self.radius, [bmu], [decay])
         self.radius = tf.math.maximum(0.00001 * tf.ones(
                                         tf.shape(self.radius)), 
@@ -106,7 +107,8 @@ class Network(tf.keras.Model):
         :type bmu: tuple
         """
         # 25 is a constant value (can be changed)
-        decay = self.initial_learning_rates * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 25)
+        # decay = self.initial_learning_rates * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 25)
+        decay = self.learning_rates[bmu] * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 25)
         self.learning_rates = tf.tensor_scatter_nd_update(self.learning_rates,
                                                     [bmu], [decay])
         self.learning_rates = tf.math.maximum(0.00001 * tf.ones(
@@ -257,9 +259,9 @@ if __name__ == '__main__':
     print("folder_path: ", folder_path)
 
     # Declare the object of the network
-    network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
+    # network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
 
-    start_time = time.time()
+    # start_time = time.time()
     # Perform the forward pass
     for index in range(10):
         # Load the data
@@ -290,6 +292,7 @@ if __name__ == '__main__':
 
     test_config = dataloader.loadModel(os.path.join(folder_path, 
                                                     'model_config.pkl'))
+    # create object of testClass() that does label prediction and accuracy calculation
     test_model = testClass(test_config['som'], 
                      test_config['shapeX'], 
                      test_config['shapeY'], 
@@ -297,10 +300,14 @@ if __name__ == '__main__':
                      test_config['unitsY'], 
                      test_config['class_count'], 
                      10)
-    test_model.setPredictedClass()
+    # Perform label prediction
+    # using argmax
+    # test_model.setPredictedClass()
+    # using Point-wise Mutual Information (PMI) from DendSOM
+    test_model.setPMILabel()
     print("model and class predictions loaded")
 
-    test_samples = dataloader.loadNistTestData("../data/" + args.dataset + "fashion/test")
+    test_samples = dataloader.loadNistTestData("../data/" + args.dataset)
     predictions = []
     labels = []
     tqdm.write("measuring test accuracy")
@@ -311,9 +318,9 @@ if __name__ == '__main__':
         predictions.append(output)
         labels.append(sample.getLabel())
     predictions = tf.stack(predictions)
-    y_test = tf.cast(y_test, dtype=tf.float32)
+    labels = tf.cast(labels, dtype=tf.float32)
     
-    accuracy = test_model.getAccuracy(predictions, y_test) * 100
+    accuracy = test_model.getAccuracy(predictions, labels) * 100
     print("accuracy = ", accuracy)
 
     dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
