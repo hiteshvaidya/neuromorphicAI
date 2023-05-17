@@ -18,8 +18,9 @@ import cv2
 import time
 import numpy as np
 import argparse
-from testSOM import testClass
+from testing2 import testClass
 from tqdm import tqdm
+import json
 
 class Network(tf.keras.Model):
     """
@@ -28,7 +29,8 @@ class Network(tf.keras.Model):
     :param tf: tensorflow
     :type tf: tensorflow layer object
     """
-    def __init__(self, imgSize, n_units, n_classes, radius, learning_rate, running_variance, running_variance_alpha):
+    def __init__(self, imgSize, n_units, n_classes, radius, learning_rate, 
+                running_variance, running_variance_alpha, tau_radius, tau_lr):
         """
         constructor
 
@@ -80,6 +82,10 @@ class Network(tf.keras.Model):
         self.initial_learning_rates = learning_rate
         self.learning_rates = learning_rate * tf.ones([n_units, n_units])
         
+        # set the tau constants for parameter decay
+        self.tau_radius = tau_radius
+        self.tau_lr = tau_lr
+        
         # Declare the layers of the network
         self.layer1 = CustomDistanceLayer(imgSize, n_units)
         self.layer2 = MinLayer(n_units)
@@ -92,8 +98,7 @@ class Network(tf.keras.Model):
         :type bmu: tuple
         """
         # 15 is a constant value (can be changed)
-        # decay = self.initial_radius * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
-        decay = self.radius[bmu] * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 15)
+        decay = self.initial_radius * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / self.tau_radius)
         self.radius = tf.tensor_scatter_nd_update(self.radius, [bmu], [decay])
         self.radius = tf.math.maximum(0.00001 * tf.ones(
                                         tf.shape(self.radius)), 
@@ -107,8 +112,7 @@ class Network(tf.keras.Model):
         :type bmu: tuple
         """
         # 25 is a constant value (can be changed)
-        # decay = self.initial_learning_rates * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 25)
-        decay = self.learning_rates[bmu] * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / 25)
+        decay = self.initial_learning_rates * tf.exp(-tf.reduce_sum(self.class_count[bmu[0], bmu[1], :]) / self.tau_lr)
         self.learning_rates = tf.tensor_scatter_nd_update(self.learning_rates,
                                                     [bmu], [decay])
         self.learning_rates = tf.math.maximum(0.00001 * tf.ones(
@@ -222,6 +226,8 @@ class Network(tf.keras.Model):
         config['running_variance'] = self.running_variance
         config['radius'] = self.radius
         config['learning_rates'] = self.learning_rates
+        config['tau_radius'] = self.tau_radius
+        config['tau_lr'] = self.tau_lr
 
         return config
 
@@ -261,7 +267,8 @@ if __name__ == '__main__':
     print("folder_path: ", folder_path)
 
     # Declare the object of the network
-    network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
+    network = Network(28, args.units, 10, args.radius, args.learning_rate, 
+                    args.variance, args.variance_alpha, args.tau_radius, args.tau_lr)
 
     start_time = time.time()
     # Perform the forward pass
@@ -290,10 +297,11 @@ if __name__ == '__main__':
     # save the trained model
     config = network.getConfig()
     dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
+    # dataloader.dumpjson(config, os.path.join(folder_path, 'model_log.json'))
+
 
     test_config = dataloader.loadModel(os.path.join(folder_path, 
                                                     'model_config.pkl'))
-    # create object of testClass() that does label prediction and accuracy calculation
     test_model = testClass(test_config['som'], 
                      test_config['shapeX'], 
                      test_config['shapeY'], 
@@ -301,10 +309,7 @@ if __name__ == '__main__':
                      test_config['unitsY'], 
                      test_config['class_count'], 
                      10)
-    # Perform label prediction
-    # using argmax
     # test_model.setPredictedClass()
-    # using Point-wise Mutual Information (PMI) from DendSOM
     test_model.setPMILabel()
     print("model and class predictions loaded")
 
@@ -318,10 +323,10 @@ if __name__ == '__main__':
         output = test_model.getPredictedClass(bmu)
         predictions.append(output)
         labels.append(sample.getLabel())
-    predictions = tf.stack(predictions)
-    labels = tf.cast(labels, dtype=tf.int64)
+    predictions = tf.cast(tf.stack(predictions), dtype=tf.float32)
+    labels = tf.cast(labels, dtype=tf.float32)
     
-    accuracy = test_model.getAccuracy(predictions, labels) * 100.0
+    accuracy = test_model.getAccuracy(predictions, labels) * 100
     print("accuracy = ", accuracy)
 
     dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
