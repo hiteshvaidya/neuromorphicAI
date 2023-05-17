@@ -265,9 +265,9 @@ if __name__ == '__main__':
 
     start_time = time.time()
     # Perform the forward pass
-    for index in range(10):
+    for index in range(5):
         # Load the data
-        class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 1)
+        class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
         
         # train on current class
         tqdm.write("current class " + str(index))
