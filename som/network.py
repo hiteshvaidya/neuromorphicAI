@@ -18,7 +18,7 @@ import cv2
 import time
 import numpy as np
 import argparse
-from testing2 import testClass
+from testingSOM import testClass
 from tqdm import tqdm
 import json
 
@@ -267,37 +267,37 @@ if __name__ == '__main__':
     print("folder_path: ", folder_path)
 
     # Declare the object of the network
-    network = Network(28, args.units, 10, args.radius, args.learning_rate, 
-                    args.variance, args.variance_alpha, args.tau_radius, args.tau_lr)
+    # network = Network(28, args.units, 10, args.radius, args.learning_rate, 
+    #                 args.variance, args.variance_alpha, args.tau_radius, args.tau_lr)
 
-    start_time = time.time()
-    # Perform the forward pass
-    for index in range(5):
-        # Load the data
-        class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
+    # start_time = time.time()
+    # # Perform the forward pass
+    # for index in range(5):
+    #     # Load the data
+    #     class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
         
-        # train on current class
-        tqdm.write("current class " + str(index))
-        for cursor, sample in tqdm(enumerate(class_train_samples)):
-            network.forwardPass(sample.getImage(), sample.getLabel())
-            # network.visualize_model()
-            # network.displayVariance()
-            # if cursor == 10:
-            #     break
+    #     # train on current class
+    #     tqdm.write("current class " + str(index))
+    #     for cursor, sample in tqdm(enumerate(class_train_samples)):
+    #         network.forwardPass(sample.getImage(), sample.getLabel())
+    #         # network.visualize_model()
+    #         # network.displayVariance()
+    #         # if cursor == 10:
+    #         #     break
         
-        # save the image of current state of SOM
-        network.saveImage(folder_path, index)
+    #     # save the image of current state of SOM
+    #     network.saveImage(folder_path, index)
 
-    execution_time = (time.time() - start_time) / 60.0
-    # Destroy all cv2 windows
-    # cv2.destroyAllWindows()
+    # execution_time = (time.time() - start_time) / 60.0
+    # # Destroy all cv2 windows
+    # # cv2.destroyAllWindows()
 
-    print(f"total execution time = {execution_time} minutes" )    
+    # print(f"total execution time = {execution_time} minutes" )    
 
-    # save the trained model
-    config = network.getConfig()
-    dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
-    # dataloader.dumpjson(config, os.path.join(folder_path, 'model_log.json'))
+    # # save the trained model
+    # config = network.getConfig()
+    # dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
+    # # dataloader.dumpjson(config, os.path.join(folder_path, 'model_log.json'))
 
 
     test_config = dataloader.loadModel(os.path.join(folder_path, 
