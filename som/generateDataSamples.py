@@ -1,3 +1,6 @@
+"""
+Generate Sample() objects of grayscaled datasets and store them in pkl files in specified folder
+"""
 import dataloader
 import numpy as np
 
@@ -39,8 +42,8 @@ def generateTestSamples(dataset):
 
 
 if __name__ == "__main__":
-    generateTrainSamples("mnist")
-    generateTestSamples("mnist")
+    # generateTrainSamples("mnist")
+    # generateTestSamples("mnist")
 
     generateTrainSamples("fashion")
     generateTestSamples("fashion")
