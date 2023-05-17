@@ -239,6 +239,8 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--variance', type=float, required=False, default=0.5, help='initial value of running variance')
     parser.add_argument('-fp', '--filepath', type=str, required=True, default=None, help='filepath for saving trained SOM model')
     parser.add_argument('-d', '--dataset', type=str, default=None, help='dataset type mnist/fashion/kmnist/cifar')
+    parser.add_argument('-tr', '--tau_radius', type=float, default=None, help='tau constant for decaying radius')
+    parser.add_argument('-tlr', '--tau_lr', type=float, default=None, help='tau constant for decaying learning rate')
     args = parser.parse_args()
 
     # Set the GPU to be used
@@ -288,7 +290,6 @@ if __name__ == '__main__':
     # save the trained model
     config = network.getConfig()
     dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
-
 
     test_config = dataloader.loadModel(os.path.join(folder_path, 
                                                     'model_config.pkl'))
