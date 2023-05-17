@@ -259,9 +259,9 @@ if __name__ == '__main__':
     print("folder_path: ", folder_path)
 
     # Declare the object of the network
-    # network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
+    network = Network(28, args.units, 10, args.radius, args.learning_rate, args.variance, args.variance_alpha)
 
-    # start_time = time.time()
+    start_time = time.time()
     # Perform the forward pass
     for index in range(10):
         # Load the data
@@ -318,9 +318,9 @@ if __name__ == '__main__':
         predictions.append(output)
         labels.append(sample.getLabel())
     predictions = tf.stack(predictions)
-    labels = tf.cast(labels, dtype=tf.float32)
+    labels = tf.cast(labels, dtype=tf.int64)
     
-    accuracy = test_model.getAccuracy(predictions, labels) * 100
+    accuracy = test_model.getAccuracy(predictions, labels) * 100.0
     print("accuracy = ", accuracy)
 
     dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
