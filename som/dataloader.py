@@ -13,6 +13,7 @@ import pickle as pkl
 import pandas as pd
 import os
 import csv
+import json
 from sample import Sample
 
 
@@ -44,6 +45,16 @@ def loadModel(filepath):
     """
     object = pkl.load(open(filepath, 'rb'))
     return object
+
+def dumpjson(data, filepath):
+    with open(filepath, 'w') as fp:
+        json.dump(data, fp)
+
+def loadjson(filepath):
+    data = None
+    with open(filepath, 'r') as fp:
+        data = json.load(fp)
+    return data
 
 def loadSplitData(path, class_number):
     """
