@@ -92,6 +92,22 @@ class testClass(tf.keras.Model):
         labels = tf.cast(tf.argmax(self.class_count, axis=-1), dtype=tf.float32)
         values = -1.0 * tf.ones(indexes.shape[0])
         self.predicted_class = tf.tensor_scatter_nd_update(labels, indexes, values)
+    
+    def setPMILabel(self):
+        """
+        set predicted label of every unit using Point-wise Mutual Information provided in Dendritic SOM paper
+        """
+        bmu_count = tf.reshape(self.class_count, [-1, self.class_count.shape[-1]])
+        conditional_probability = bmu_count / tf.reduce_sum(bmu_count, axis=1)
+        prior = tf.reduce_sum(bmu_count, axis=0)
+        prior = prior / tf.reduce_sum(bmu_count)
+
+        predictions = conditional_probability / prior
+        print("predictions before argmax: ", predictions.shape)
+        predictions = tf.argmax(predictions, axis=1)
+        self.predicted_class = tf.reshape(predictions, [self.unitsX, self.unitsY])
+
+
 
     
 if __name__ == '__main__':
