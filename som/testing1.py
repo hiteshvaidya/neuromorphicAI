@@ -100,10 +100,10 @@ if __name__ == '__main__':
     # print(test.class_count)
 
     # Define the shape of the input image
-    image_shape = (28, 28)
+    image_shape = (som_model['shapeX'] // som_model['unitsX'], som_model['shapeY'] // som_model['unitsY'])
 
     # Define the shape of the feature map
-    feature_map_shape = (560, 560)
+    feature_map_shape = (som_model['shapeX'], som_model['shapeY'])
 
     # Define the input layer for the input image
     input_image = layers.Input(shape=image_shape)
