@@ -65,8 +65,9 @@ class testClass(tf.keras.Model):
         self.layer2 = MaxLayer(self.unitsX)
         
     def getPredictedClass(self, x):
-        predictedClass = tf.gather(tf.gather(self.predicted_class, x[0]), x[1])
-        return predictedClass
+        # predictedClass = tf.gather(tf.gather(self.predicted_class, x[0]), x[1])
+        # return predictedClass
+        return self.predicted_class[x]
 
     def getAccuracy(self, y_pred, y_test):
         correct_predictions = tf.reduce_sum(tf.cast(tf.equal(y_pred, y_test), tf.float32))
@@ -86,7 +87,10 @@ class testClass(tf.keras.Model):
         set predicted label of every unit using Point-wise Mutual Information provided in Dendritic SOM paper
         """
         bmu_count = tf.reshape(self.class_count, [-1, self.class_count.shape[-1]])
-        conditional_probability = bmu_count / tf.reduce_sum(bmu_count, axis=1)
+        print("bmu_count: ", bmu_count.shape)
+        denom = tf.expand_dims(tf.reduce_sum(bmu_count, axis=1), axis=1)
+        print("denom: ", denom.shape)
+        conditional_probability = bmu_count / denom
         prior = tf.reduce_sum(bmu_count, axis=0)
         prior = prior / tf.reduce_sum(bmu_count)
 
