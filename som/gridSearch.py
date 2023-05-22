@@ -96,7 +96,7 @@ if __name__ == '__main__':
         
         for task_index in range(5):
             # Load data samples for each task
-            train_samples = dataloader.loadClassIncremental(os.path.join('../data', params['d'], 'train', task_index, 2))
+            train_samples = dataloader.loadClassIncremental(os.path.join('../data', params['d'], 'train'), task_index, 2)
 
             # train model
             model.fit(train_samples, output_path, task_index)
