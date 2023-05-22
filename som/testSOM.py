@@ -87,15 +87,12 @@ class testClass(tf.keras.Model):
         set predicted label of every unit using Point-wise Mutual Information provided in Dendritic SOM paper
         """
         bmu_count = tf.reshape(self.class_count, [-1, self.class_count.shape[-1]])
-        print("bmu_count: ", bmu_count.shape)
         denom = tf.expand_dims(tf.reduce_sum(bmu_count, axis=1), axis=1)
-        print("denom: ", denom.shape)
         conditional_probability = bmu_count / denom
         prior = tf.reduce_sum(bmu_count, axis=0)
         prior = prior / tf.reduce_sum(bmu_count)
 
         predictions = conditional_probability / prior
-        print("predictions before argmax: ", predictions.shape)
         predictions = tf.argmax(predictions, axis=1)
         self.predicted_class = tf.reshape(predictions, [self.unitsX, self.unitsY])
 
