@@ -137,6 +137,7 @@ if __name__ == '__main__':
             best_accuracy = accuracy
             best_params = params
             dataloader.saveModel(config, os.path.join(best_model_path, 'model_config.pkl'))
+            dataloader.writeAccuracy(os.path.join(best_model_path, 'accuracy.txt'), best_accuracy)
             best_model_output_path = output_path
 
 
