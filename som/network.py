@@ -18,7 +18,7 @@ import cv2
 import time
 import numpy as np
 import argparse
-from testingSOM import testClass
+from testSOM import testClass
 from tqdm import tqdm
 import json
 
@@ -198,7 +198,7 @@ class Network(tf.keras.Model):
         self.decayLearningRate(bmu)
 
     
-    def forwardPass(self, x, y):
+    def call(self, x, y):
         """
         Forward pass through the network
 
@@ -208,6 +208,26 @@ class Network(tf.keras.Model):
         tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
         bmu = self.layer2(unit_map)
         self.weight_update(bmu, tiled_input, y)
+    
+    def fit(self, train_samples, folder_path, index):
+        """
+        Train the model
+
+        :param train_samples: samples from train set
+        :type train_samples: array of sample objects
+        :param folder_path: folder path for storing images
+        :type folder_path: str
+        :param index: current task index
+        :type index: int
+        """
+        tqdm.write("fitting model for task " + str(index))
+        for cursor, sample in tqdm(enumerate(train_samples)):
+            # forward pass
+            self(sample.getImage(), sample.getLabel())
+            
+        # save the image of current state of SOM
+        # self.saveImage(folder_path, index)
+
 
     def getConfig(self):
         """
@@ -243,7 +263,7 @@ if __name__ == '__main__':
     parser.add_argument('-lr', '--learning_rate', type=float, required=True, default=None, help='initial learning rate of every unit in SOM')
     parser.add_argument('-va', '--variance_alpha', type=float, required=False, default=0.9, help='initial value of alpha for running variance')
     parser.add_argument('-v', '--variance', type=float, required=False, default=0.5, help='initial value of running variance')
-    parser.add_argument('-fp', '--filepath', type=str, required=True, default=None, help='filepath for saving trained SOM model')
+    parser.add_argument('-fp', '--filepath', type=str, required=False, default=None, help='filepath for saving trained SOM model')
     parser.add_argument('-d', '--dataset', type=str, default=None, help='dataset type mnist/fashion/kmnist/cifar')
     parser.add_argument('-tr', '--tau_radius', type=float, default=None, help='tau constant for decaying radius')
     parser.add_argument('-tlr', '--tau_lr', type=float, default=None, help='tau constant for decaying learning rate')
@@ -267,37 +287,24 @@ if __name__ == '__main__':
     print("folder_path: ", folder_path)
 
     # Declare the object of the network
-    # network = Network(28, args.units, 10, args.radius, args.learning_rate, 
-    #                 args.variance, args.variance_alpha, args.tau_radius, args.tau_lr)
+    network = Network(28, args.units, 10, args.radius, args.learning_rate, 
+                    args.variance, args.variance_alpha, args.tau_radius, args.tau_lr)
 
-    # start_time = time.time()
-    # # Perform the forward pass
-    # for index in range(5):
-    #     # Load the data
-    #     class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
-        
-    #     # train on current class
-    #     tqdm.write("current class " + str(index))
-    #     for cursor, sample in tqdm(enumerate(class_train_samples)):
-    #         network.forwardPass(sample.getImage(), sample.getLabel())
-    #         # network.visualize_model()
-    #         # network.displayVariance()
-    #         # if cursor == 10:
-    #         #     break
-        
-    #     # save the image of current state of SOM
-    #     network.saveImage(folder_path, index)
+    # Perform the forward pass
+    for index in range(5):
+        # Load the data as per choice of training
+        class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
 
-    # execution_time = (time.time() - start_time) / 60.0
-    # # Destroy all cv2 windows
-    # # cv2.destroyAllWindows()
+        # fit/train the model on train samples
+        network.fit(class_train_samples, folder_path, index)
 
-    # print(f"total execution time = {execution_time} minutes" )    
+    # Destroy all cv2 windows
+    # cv2.destroyAllWindows()
 
-    # # save the trained model
-    # config = network.getConfig()
-    # dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
-    # # dataloader.dumpjson(config, os.path.join(folder_path, 'model_log.json'))
+    # save the trained model
+    config = network.getConfig()
+    dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
+    # dataloader.dumpjson(config, os.path.join(folder_path, 'model_log.json'))
 
 
     test_config = dataloader.loadModel(os.path.join(folder_path, 
