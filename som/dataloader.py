@@ -230,3 +230,34 @@ def dumpSplitData(images, labels, nClasses, path):
         samples = generateSamples(class_images, class_labels, images.shape[1], images.shape[-1])
         pkl.dump(samples, open(os.path.join(path, str(c) + ".pkl"), 'wb'))
     
+
+def splitImages(images, split_size):
+    """
+    Split the dataset where each image is split into patches
+
+    :param images: dataset
+    :type images: tensor -> [Nx28x28]
+    :param split_size: size of patches
+    :type split_size: tuple or array shape
+    """
+    # add number of channels for grayscaled images
+    # Shape: (batch_size, height, width, channels)
+    images = tf.expand_dims(images, -1)
+    
+    # Define the parameters for patch extraction
+    patch_size = [1, split_size[0], split_size[1], 1]  # Size of each patch
+    strides = [1, split_size[0], split_size[1], 1]     # Strides for patch extraction
+    rates = [1, 1, 1, 1]       # Dilation rates
+
+    # Extract patches from the input tensors
+    patches = tf.image.extract_patches(images=images,
+                                    sizes=patch_size,
+                                    strides=strides,
+                                    rates=rates,
+                                    padding='VALID')
+    
+    # Reshape the patches to the desired shape
+    num_patches = patches.shape[1] * patches.shape[2]
+    patches = tf.reshape(patches, (1000, num_patches, 4, 4, 1))
+
+    print("patches shape: ", patches.shape)
