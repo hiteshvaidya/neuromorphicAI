@@ -93,6 +93,7 @@ class testClass(tf.keras.Model):
         prior = prior / tf.reduce_sum(bmu_count)
 
         predictions = conditional_probability / prior
+        print("predictions: ", predictions)
         predictions = tf.argmax(predictions, axis=1)
         self.predicted_class = tf.reshape(predictions, [self.unitsX, self.unitsY])
 
