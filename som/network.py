@@ -305,7 +305,7 @@ if __name__ == '__main__':
     config = network.getConfig()
     dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
     # dataloader.dumpjson(config, os.path.join(folder_path, 'model_log.json'))
-
+    del network
 
     test_config = dataloader.loadModel(os.path.join(folder_path, 
                                                     'model_config.pkl'))
