@@ -239,6 +239,8 @@ def splitImages(images, split_size):
     :type images: tensor -> [Nx28x28]
     :param split_size: size of patches
     :type split_size: tuple or array shape
+    :return: batch of patches of all input samples
+    :rtype: tensor -> [n, number of patches, split_size, split_size, 1]
     """
     # add number of channels for grayscaled images
     # Shape: (batch_size, height, width, channels)
@@ -256,8 +258,11 @@ def splitImages(images, split_size):
                                     rates=rates,
                                     padding='VALID')
     
+    print("patches shape after extract_patches: ", patches.shape)
+
     # Reshape the patches to the desired shape
     num_patches = patches.shape[1] * patches.shape[2]
-    patches = tf.reshape(patches, (1000, num_patches, 4, 4, 1))
-
-    print("patches shape: ", patches.shape)
+    patches = tf.reshape(patches, (-1, num_patches, split_size, split_size))
+    print("batch of images after reshaping: ", patches.shape)
+    
+    return patches
