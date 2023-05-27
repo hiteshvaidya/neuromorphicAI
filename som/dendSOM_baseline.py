@@ -22,6 +22,8 @@ from testSOM import testClass
 from tqdm import tqdm
 import json
 
+
+
 class Network(tf.keras.Model):
     """
     This class forms the network for the operation of SOM
@@ -310,23 +312,25 @@ if __name__ == '__main__':
     # cv2.destroyAllWindows()
 
     # save the trained model
-    config = network.getConfig()
-    dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
-    # dataloader.dumpjson(config, os.path.join(folder_path, 'model_log.json'))
-    del network
-
-    test_config = dataloader.loadModel(os.path.join(folder_path, 
-                                                    'model_config.pkl'))
-    test_model = testClass(test_config['som'], 
-                     test_config['shapeX'], 
-                     test_config['shapeY'], 
-                     test_config['unitsX'], 
-                     test_config['unitsY'], 
-                     test_config['class_count'], 
-                     10)
-    # test_model.setPredictedClass()
-    test_model.setPMILabel()
-    print("model and class predictions loaded")
+    configs = []
+    test_models = []
+    labels = tf.zeros([args.n_soms, args.units, args.units])
+    for count in range(args.n_soms):
+        configs.append(networks[0].getConfig())
+        dataloader.saveModel(configs[0], os.path.join(folder_path, 'model_config-' + str(count) + '.pkl'))
+        test_models.append(testClass(configs[count]['som'], 
+                     configs[count]['shapeX'], 
+                     configs[count]['shapeY'], 
+                     configs[count]['unitsX'], 
+                     configs[count]['unitsY'], 
+                     configs[count]['class_count'], 
+                     10))
+        networks.pop(0)    
+        tf.scatter_nd_update(labels, [[count]], [test_models[count].getPMI()])
+    
+    print("labels shape: ", labels.shape)
+    labels = tf.argmax(labels, axis=0)
+    print("labels shape after: ", labels.shape)
 
     test_samples = dataloader.loadNistTestData("../data/" + args.dataset)
     predictions = []
