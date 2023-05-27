@@ -93,10 +93,17 @@ class testClass(tf.keras.Model):
         prior = prior / tf.reduce_sum(bmu_count)
 
         predictions = conditional_probability / prior
-        print("predictions: ", predictions)
         predictions = tf.argmax(predictions, axis=1)
         self.predicted_class = tf.reshape(predictions, [self.unitsX, self.unitsY])
 
+    def getPMI(self):
+        bmu_count = tf.reshape(self.class_count, [-1, self.class_count.shape[-1]])
+        denom = tf.expand_dims(tf.reduce_sum(bmu_count, axis=1), axis=1)
+        conditional_probability = bmu_count / denom
+        prior = tf.reduce_sum(bmu_count, axis=0)
+        prior = prior / tf.reduce_sum(bmu_count)
+        predictions = conditional_probability / prior
+        return predictions
 
     
 if __name__ == '__main__':
