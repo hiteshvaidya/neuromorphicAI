@@ -332,17 +332,32 @@ if __name__ == '__main__':
     labels = tf.argmax(labels, axis=0)
     print("labels shape after: ", labels.shape)
 
+    # load test samples
     test_samples = dataloader.loadNistTestData("../data/" + args.dataset)
+    # collect labels of test_samples
+    labels = tf.convert_to_tensor([sample.getLabel() 
+                                   for sample in test_samples])
+    # split every image into patches
+    sample_patches = dataloader.splitImages(test_samples, args.patch_size)
+    # delete test_samples
+    del test_samples
+
     predictions = []
-    labels = []
+    labels = tf.Variable([])
     tqdm.write("measuring test accuracy")
-    for sample in tqdm(test_samples): 
-        feature_map = test_model.layer1(test_config['som'], sample.getImage())
-        bmu = test_model.layer2(feature_map)
-        output = test_model.getPredictedClass(bmu)
-        predictions.append(output)
-        labels.append(sample.getLabel())
-    predictions = tf.cast(tf.stack(predictions), dtype=tf.float32)
+
+    for sample in tqdm(sample_patches):
+        dendSOM_predictions = tf.Variable([])
+        for count in range(args.n_som):
+            feature_map = test_models[count].layer1(configs[count]['som'],
+                                                    sample.getImage())
+            bmu = test_models[count].layer2(feature_map)
+            output = test_models[count].getPMI()
+            dendSOM_predictions = tf.concat([dendSOM_predictions, output],
+                                             axis=0)
+            
+    
+    predictions = tf.cast(predictions, dtype=tf.float32)
     labels = tf.cast(labels, dtype=tf.float32)
     
     accuracy = test_model.getAccuracy(predictions, labels) * 100
