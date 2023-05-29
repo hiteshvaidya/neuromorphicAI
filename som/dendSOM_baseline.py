@@ -55,7 +55,7 @@ class Network(tf.keras.Model):
         units = []
         for _ in range(self.unitsX * self.unitsY):
             current_time = time.time() - st
-            units.append(tf.random.normal([28, 28], mean=0.4, stddev=0.3, seed=current_time))
+            units.append(tf.random.normal([imgSize, imgSize], mean=0.4, stddev=0.3, seed=current_time))
         
         # stack the units along rows and columns or reshape to form the SOM
         self.som = tf.concat([tf.concat(units_col, axis=1) for units_col in tf.split(units, self.unitsX)], axis=0)
@@ -289,7 +289,10 @@ if __name__ == '__main__':
     parser.add_argument('-n', '--n_soms', type=int, required=True, default=None, help='number of SOMs')
     parser.add_argument('-ps', '--patch_size', type=int, required=True, default=None, help='size of each patch of an image')
     args = parser.parse_args()
-   
+    
+    # start time
+    begin = time.time()
+
     # create 'logs' folder
     if not os.path.exists("logs"):
         os.makedirs("logs")
@@ -303,7 +306,7 @@ if __name__ == '__main__':
     networks = []
     n_classes = 10
     for count in range(args.n_soms):
-        networks.append(Network(28, args.units, n_classes, 
+        networks.append(Network(args.patch_size, args.units, n_classes, 
                                 args.radius, args.learning_rate, 
                                 args.variance, args.variance_alpha, 
                                 args.tau_radius, args.tau_lr
@@ -321,7 +324,7 @@ if __name__ == '__main__':
         
         # fit/train the model on train samples
         for count in range(args.n_soms):
-            networks[count].fit(task_samples[:, count, :, :], 
+            networks[count].fit(task_samples[:, count], 
                                 folder_path, 
                                 index)
 
@@ -345,10 +348,8 @@ if __name__ == '__main__':
         networks.pop(0)    
         tf.scatter_nd_update(labels, [[count]], [test_models[count].getPMI()])
     
-    print("labels shape: ", labels.shape)
     labels = tf.argmax(labels, axis=0)
-    print("labels shape after: ", labels.shape)
-
+    
     # load test samples
     test_samples = dataloader.loadNistTestData("../data/" + args.dataset)
     # collect labels of test_samples
@@ -386,3 +387,6 @@ if __name__ == '__main__':
     print("accuracy = ", accuracy)
 
     dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
+
+    end = time.time()
+    print("execution time: ", (end-begin).total_seconds() / 60)
