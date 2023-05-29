@@ -16,8 +16,6 @@ import csv
 import json
 from sample import Sample
 
-
-
 def loadmnist():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_train = tf.cast(x_train / 255.0, tf.float32)
@@ -231,22 +229,26 @@ def dumpSplitData(images, labels, nClasses, path):
         pkl.dump(samples, open(os.path.join(path, str(c) + ".pkl"), 'wb'))
     
 
-def splitImages(images, split_size):
+def splitImages(samples, split_size):
     """
     Split the dataset where each image is split into patches
 
-    :param images: dataset
-    :type images: tensor -> [Nx28x28]
+    :param samples: dataset
+    :type samples: list of sample objects
     :param split_size: size of patches
-    :type split_size: tuple or array shape
+    :type split_size: int
+    :return: batch of patches of all input samples
+    :rtype: tensor -> [n, number of patches, split_size, split_size, 1]
     """
     # add number of channels for grayscaled images
     # Shape: (batch_size, height, width, channels)
+    images = tf.convert_to_tensor([sample.getImage() for sample in samples])
+    labels = tf.convert_to_tensor([sample.getLabel() for sample in samples])
     images = tf.expand_dims(images, -1)
     
     # Define the parameters for patch extraction
-    patch_size = [1, split_size[0], split_size[1], 1]  # Size of each patch
-    strides = [1, split_size[0], split_size[1], 1]     # Strides for patch extraction
+    patch_size = [1, split_size, split_size, 1]  # Size of each patch
+    strides = [1, split_size, split_size, 1]     # Strides for patch extraction
     rates = [1, 1, 1, 1]       # Dilation rates
 
     # Extract patches from the input tensors
@@ -258,6 +260,14 @@ def splitImages(images, split_size):
     
     # Reshape the patches to the desired shape
     num_patches = patches.shape[1] * patches.shape[2]
-    patches = tf.reshape(patches, (1000, num_patches, 4, 4, 1))
+    patches = tf.reshape(patches, (-1, num_patches, split_size, split_size))
 
-    print("patches shape: ", patches.shape)
+    samples = []
+    for index in range(patches.shape[0]):
+        row = []
+        for count in range(patches.shape[1]):
+            row.append(Sample(labels[index], patches.shape[2], patches.shape[-1], patches[index, count, :, :]))
+        samples.append(np.asarray(row))
+    samples = np.asarray(samples)
+    
+    return samples

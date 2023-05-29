@@ -73,3 +73,6 @@ class Sample(object):
         :rtype: tuple
         """
         return (self.shapeX, self.shapeY)
+
+    def __str__(self) -> str:
+        return str(self.shapeX) + ', ' + str(self.shapeY) + ': ' + str(self.label)

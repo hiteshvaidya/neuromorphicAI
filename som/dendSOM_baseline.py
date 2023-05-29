@@ -1,7 +1,7 @@
 """
 network.py
 
-description: code for SOM
+description: code for DendSOM
 version: 2.0
 author: Hitesh Vaidya
 """
@@ -21,6 +21,8 @@ import argparse
 from testSOM import testClass
 from tqdm import tqdm
 import json
+import multiprocessing
+from datetime import datetime
 
 class Network(tf.keras.Model):
     """
@@ -53,7 +55,7 @@ class Network(tf.keras.Model):
         units = []
         for _ in range(self.unitsX * self.unitsY):
             current_time = time.time() - st
-            units.append(tf.random.normal([28, 28], mean=0.4, stddev=0.3, seed=current_time))
+            units.append(tf.random.normal([imgSize, imgSize], mean=0.4, stddev=0.3, seed=current_time))
         
         # stack the units along rows and columns or reshape to form the SOM
         self.som = tf.concat([tf.concat(units_col, axis=1) for units_col in tf.split(units, self.unitsX)], axis=0)
@@ -197,6 +199,23 @@ class Network(tf.keras.Model):
         self.decayRadius(bmu)
         self.decayLearningRate(bmu)
 
+    def getPMI(self):
+        """
+        Accessor for the PMI of every unit in this SOM model
+
+        :return: PMI
+        :rtype: [unitsX, unitsY, n_Classes]
+        """
+        bmu_count = tf.reshape(self.class_count, 
+                               [-1, self.class_count.shape[-1]])
+        denom = tf.expand_dims(tf.reduce_sum(bmu_count, axis=1), axis=1)
+        conditional_probability = bmu_count / denom
+        prior = tf.reduce_sum(bmu_count, axis=0)
+        prior = prior / tf.reduce_sum(bmu_count)
+        pmi = conditional_probability / prior
+        pmi = tf.reshape(pmi, [self.unitsX, self.unitsY, -1])
+
+        return pmi
     
     def call(self, x, y):
         """
@@ -226,7 +245,7 @@ class Network(tf.keras.Model):
             self(sample.getImage(), sample.getLabel())
             
         # save the image of current state of SOM
-        # self.saveImage(folder_path, index)
+        self.saveImage(folder_path, index)
 
 
     def getConfig(self):
@@ -242,7 +261,7 @@ class Network(tf.keras.Model):
         config['shapeY'] = self.shapeY
         config['unitsX'] = self.unitsX
         config['unitsY'] = self.unitsY
-        config['class_count'] = self.class_count
+        config['pmi'] = self.getPMI()
         config['running_variance'] = self.running_variance
         config['radius'] = self.radius
         config['learning_rates'] = self.learning_rates
@@ -267,16 +286,13 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--dataset', type=str, default=None, help='dataset type mnist/fashion/kmnist/cifar')
     parser.add_argument('-tr', '--tau_radius', type=float, default=None, help='tau constant for decaying radius')
     parser.add_argument('-tlr', '--tau_lr', type=float, default=None, help='tau constant for decaying learning rate')
+    parser.add_argument('-n', '--n_soms', type=int, required=True, default=None, help='number of SOMs')
+    parser.add_argument('-ps', '--patch_size', type=int, required=True, default=None, help='size of each patch of an image')
     args = parser.parse_args()
+    
+    # start time
+    begin = datetime.now()
 
-    # Set the GPU to be used
-    # physical_devices = tf.config.list_physical_devices('GPU')
-    # if physical_devices:
-    #     tf.config.experimental.set_memory_growth(physical_devices[args.gpuid], True)
-    #     tf.config.set_visible_devices(physical_devices[args.gpuid], 'GPU')
-    # set gpu
-    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpuid
-   
     # create 'logs' folder
     if not os.path.exists("logs"):
         os.makedirs("logs")
@@ -286,54 +302,94 @@ if __name__ == '__main__':
         os.makedirs(folder_path)
     print("folder_path: ", folder_path)
 
-    # Declare the object of the network
-    network = Network(28, args.units, 10, args.radius, args.learning_rate, 
-                    args.variance, args.variance_alpha, args.tau_radius, args.tau_lr)
+    # Declare a list of objects of SOM where each SOM runs on a split patch of an input sample
+    networks = []
+    network_ids = []
+    n_classes = 10
+    for count in range(args.n_soms):
+        networks.append(Network(args.patch_size, args.units, n_classes, 
+                                args.radius, args.learning_rate, 
+                                args.variance, args.variance_alpha, 
+                                args.tau_radius, args.tau_lr
+                                )
+                        )
+        network_ids.append(count)
 
     # Perform the forward pass
     for index in range(5):
         # Load the data as per choice of training
-        class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
+        task_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
 
+        # split every image into patches
+        task_samples = dataloader.splitImages(task_samples,
+                                              args.patch_size)
+        
         # fit/train the model on train samples
-        network.fit(class_train_samples, folder_path, index)
+        for count in range(args.n_soms):
+            networks[count].fit(task_samples[:, count], 
+                                folder_path, 
+                                index)
 
     # Destroy all cv2 windows
     # cv2.destroyAllWindows()
 
     # save the trained model
-    config = network.getConfig()
-    dataloader.saveModel(config, os.path.join(folder_path, 'model_config.pkl'))
-    # dataloader.dumpjson(config, os.path.join(folder_path, 'model_log.json'))
-    del network
-
-    test_config = dataloader.loadModel(os.path.join(folder_path, 
-                                                    'model_config.pkl'))
-    test_model = testClass(test_config['som'], 
-                     test_config['shapeX'], 
-                     test_config['shapeY'], 
-                     test_config['unitsX'], 
-                     test_config['unitsY'], 
-                     test_config['class_count'], 
-                     10)
-    # test_model.setPredictedClass()
-    test_model.setPMILabel()
-    print("model and class predictions loaded")
-
+    configs = []
+    test_models = []
+    
+    for count in range(args.n_soms):
+        configs.append(networks[0].getConfig())
+        dataloader.saveModel(configs[0], os.path.join(folder_path, 'model_config-' + str(count) + '.pkl'))
+        test_models.append(testClass(configs[count]['som'], 
+                     configs[count]['shapeX'], 
+                     configs[count]['shapeY'], 
+                     configs[count]['unitsX'], 
+                     configs[count]['unitsY'], 
+                     configs[count]['pmi'], 
+                     n_classes))
+        networks.pop(0)    
+        # tf.scatter_nd_update(labels, [[count]], [test_models[count].getPMI()])
+    
+    # labels = tf.argmax(labels, axis=0)
+    
+    # load test samples
     test_samples = dataloader.loadNistTestData("../data/" + args.dataset)
-    predictions = []
-    labels = []
+    # collect labels of test_samples
+    labels = tf.convert_to_tensor([sample.getLabel() 
+                                   for sample in test_samples])
+    # split every image into patches
+    test_samples = dataloader.splitImages(test_samples, args.patch_size)
+
+    predictions = tf.Variable([], dtype=tf.int32)
     tqdm.write("measuring test accuracy")
-    for sample in tqdm(test_samples): 
-        feature_map = test_model.layer1(test_config['som'], sample.getImage())
-        bmu = test_model.layer2(feature_map)
-        output = test_model.getPredictedClass(bmu)
-        predictions.append(output)
-        labels.append(sample.getLabel())
-    predictions = tf.cast(tf.stack(predictions), dtype=tf.float32)
-    labels = tf.cast(labels, dtype=tf.float32)
+
+    for sample in tqdm(test_samples):
+        # PMI for BMU from every dendSOM
+        pmis = tf.zeros(n_classes)
+
+        # Test every dendSOM on an input test sample
+        for count in range(args.n_soms):
+            # forward pass for the test phase
+            feature_map = test_models[count].layer1(configs[count]['som'],
+                                                    sample[count].getImage())
+            # Get the best matching unit for test sample
+            bmu = test_models[count].layer2(feature_map)
+            # Get the PMI of the bmu from the current dendSOM and 
+            # add it to store cumulative PMI of every label from every dendSOM
+            # pmi shape: [n_soms, n_classes]
+            pmis += test_models[count].get_bmu_PMIs(bmu)
+        # Calculate predicted label by performing argmax over PMI of every label
+        # concatenate the predicted label value in `predictions` tensor
+        predictions = tf.concat([predictions, 
+                                 [tf.argmax(pmis, output_type=tf.dtypes.int32)]], axis=0)
+    
+    predictions = tf.cast(predictions, dtype=tf.int32)
+    labels = tf.cast(labels, dtype=tf.int32)
     
     accuracy = util.getAccuracy(predictions, labels) * 100
     print("accuracy = ", accuracy)
 
     dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
+
+    end = datetime.now()
+    print("execution time: ", (end-begin).total_seconds() / 60)
