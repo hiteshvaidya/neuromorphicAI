@@ -2,7 +2,7 @@
 network.py
 
 description: code for DendSOM
-version: 1.0
+version: 2.0
 author: Hitesh Vaidya
 """
 
@@ -21,8 +21,8 @@ import argparse
 from testSOM import testClass
 from tqdm import tqdm
 import json
-
-
+import multiprocessing
+from datetime import datetime
 
 class Network(tf.keras.Model):
     """
@@ -291,7 +291,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     # start time
-    begin = time.time()
+    begin = datetime.now()
 
     # create 'logs' folder
     if not os.path.exists("logs"):
@@ -304,6 +304,7 @@ if __name__ == '__main__':
 
     # Declare a list of objects of SOM where each SOM runs on a split patch of an input sample
     networks = []
+    network_ids = []
     n_classes = 10
     for count in range(args.n_soms):
         networks.append(Network(args.patch_size, args.units, n_classes, 
@@ -312,6 +313,7 @@ if __name__ == '__main__':
                                 args.tau_radius, args.tau_lr
                                 )
                         )
+        network_ids.append(count)
 
     # Perform the forward pass
     for index in range(5):
@@ -334,7 +336,7 @@ if __name__ == '__main__':
     # save the trained model
     configs = []
     test_models = []
-    labels = tf.zeros([args.n_soms, args.units, args.units])
+    
     for count in range(args.n_soms):
         configs.append(networks[0].getConfig())
         dataloader.saveModel(configs[0], os.path.join(folder_path, 'model_config-' + str(count) + '.pkl'))
@@ -346,9 +348,9 @@ if __name__ == '__main__':
                      configs[count]['pmi'], 
                      n_classes))
         networks.pop(0)    
-        tf.scatter_nd_update(labels, [[count]], [test_models[count].getPMI()])
+        # tf.scatter_nd_update(labels, [[count]], [test_models[count].getPMI()])
     
-    labels = tf.argmax(labels, axis=0)
+    # labels = tf.argmax(labels, axis=0)
     
     # load test samples
     test_samples = dataloader.loadNistTestData("../data/" + args.dataset)
@@ -366,7 +368,7 @@ if __name__ == '__main__':
         pmis = tf.zeros(n_classes)
 
         # Test every dendSOM on an input test sample
-        for count in range(args.n_som):
+        for count in range(args.n_soms):
             # forward pass for the test phase
             feature_map = test_models[count].layer1(configs[count]['som'],
                                                     sample[count].getImage())
@@ -378,7 +380,8 @@ if __name__ == '__main__':
             pmis += test_models[count].get_bmu_PMIs(bmu)
         # Calculate predicted label by performing argmax over PMI of every label
         # concatenate the predicted label value in `predictions` tensor
-        predictions = tf.concat([predictions, tf.argmax(pmis)], axis=0)
+        predictions = tf.concat([predictions, 
+                                 [tf.argmax(pmis, output_type=tf.dtypes.int32)]], axis=0)
     
     predictions = tf.cast(predictions, dtype=tf.int32)
     labels = tf.cast(labels, dtype=tf.int32)
@@ -388,5 +391,5 @@ if __name__ == '__main__':
 
     dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
 
-    end = time.time()
+    end = datetime.now()
     print("execution time: ", (end-begin).total_seconds() / 60)
