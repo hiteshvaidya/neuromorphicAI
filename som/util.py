@@ -77,3 +77,18 @@ def global_variance_distance(input_matrix, som_matrix, som_running_variances):
     distance_matrix = (input_matrix - som_matrix) * (input_matrix - som_matrix) / tf.math.sqrt(som_running_variances)
     
     return distance_matrix
+
+def getAccuracy(y_pred, y_test):
+    """
+    Given the predicted and expected labels, calculate the accuracy
+
+    :param y_pred: predicted labels from the SOM
+    :type y_pred: 1D tensor
+    :param y_test: expected labels from the SOM
+    :type y_test: 1D tensor
+    :return: accuracy value
+    :rtype: float
+    """
+    correct_predictions = tf.reduce_sum(tf.cast(tf.equal(y_pred, y_test), tf.float32))
+    accuracy = correct_predictions / tf.cast(tf.shape(y_test)[0], tf.float32)
+    return accuracy
