@@ -16,8 +16,6 @@ import csv
 import json
 from sample import Sample
 
-
-
 def loadmnist():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_train = tf.cast(x_train / 255.0, tf.float32)
