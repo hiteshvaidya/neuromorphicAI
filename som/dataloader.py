@@ -244,17 +244,9 @@ def splitImages(samples, split_size):
     """
     # add number of channels for grayscaled images
     # Shape: (batch_size, height, width, channels)
-    labels = tf.Variable([], dtype=tf.int32)
-    images = tf.reshape(tf.Variable([], dtype=tf.float32), [0,28])
-    for sample in samples:
-        images = tf.concat([images, sample.getImage()], axis=0)
-        print("label: ", sample.getLabel())
-        labels = tf.stack([labels, sample.getLabel()])
-    # images = tf.convert_to_tensor([sample.getImage() for sample in samples])
-    # labels = tf.convert_to_tensor([sample.getLabel() for sample in samples])
-
+    images = tf.convert_to_tensor([sample.getImage() for sample in samples])
+    labels = tf.convert_to_tensor([sample.getLabel() for sample in samples])
     images = tf.expand_dims(images, -1)
-    print("image shape: ", images.shape)
     
     # Define the parameters for patch extraction
     patch_size = [1, split_size, split_size, 1]  # Size of each patch
@@ -268,12 +260,9 @@ def splitImages(samples, split_size):
                                     rates=rates,
                                     padding='VALID')
     
-    print("patches shape after extract_patches: ", patches.shape)
-
     # Reshape the patches to the desired shape
     num_patches = patches.shape[1] * patches.shape[2]
     patches = tf.reshape(patches, (-1, num_patches, split_size, split_size))
-    print("batch of images after reshaping: ", patches.shape)
 
     samples = []
     for index in range(patches.shape[0]):
