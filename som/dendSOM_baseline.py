@@ -245,7 +245,7 @@ class Network(tf.keras.Model):
             self(sample.getImage(), sample.getLabel())
             
         # save the image of current state of SOM
-        # self.saveImage(folder_path, index)
+        self.saveImage(folder_path, index)
 
 
     def getConfig(self):
