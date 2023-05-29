@@ -56,7 +56,7 @@ class testClass(tf.keras.Model):
         self.predicted_class = tf.ones([self.unitsX, self.unitsY]) * (-1.0)
         
         # class_count for every unit i.e. how many number of times a unit was selected as BMU for every class in the dataset
-        self.class_count = tf.zeros([self.unitsX, self.unitsY, n_classes])
+        # self.class_count = tf.zeros([self.unitsX, self.unitsY, n_classes])
         self.class_count = class_count
 
         # Declare the layers of the network
@@ -68,11 +68,6 @@ class testClass(tf.keras.Model):
         # predictedClass = tf.gather(tf.gather(self.predicted_class, x[0]), x[1])
         # return predictedClass
         return self.predicted_class[x]
-
-    def getAccuracy(self, y_pred, y_test):
-        correct_predictions = tf.reduce_sum(tf.cast(tf.equal(y_pred, y_test), tf.float32))
-        accuracy = correct_predictions / tf.cast(tf.shape(y_test)[0], tf.float32)
-        return accuracy
 
     def setPredictedClass(self):      
         # Update the predicted class for each unit
@@ -95,14 +90,18 @@ class testClass(tf.keras.Model):
         predictions = conditional_probability / prior
         predictions = tf.argmax(predictions, axis=1)
         self.predicted_class = tf.reshape(predictions, [self.unitsX, self.unitsY])
+    
+    def get_bmu_PMIs(self, bmu):
+        """
+        Accessor for the PMI of a unit
 
-    def getPMI(self):
-        bmu_count = tf.reshape(self.class_count, [-1, self.class_count.shape[-1]])
-        denom = tf.expand_dims(tf.reduce_sum(bmu_count, axis=1), axis=1)
-        conditional_probability = bmu_count / denom
-        prior = tf.reduce_sum(bmu_count, axis=0)
-        prior = prior / tf.reduce_sum(bmu_count)
-        predictions = conditional_probability / prior
+        :param bmus: coordinates of bmu
+        :type bmus: tuple
+        :return: PMI of bmu
+        :rtype: tensor - [1, n_classes]
+        """
+        # Gather PMIs of only BMUs
+        predictions = tf.gather_nd(self.class_count, bmu)
         return predictions
 
     
