@@ -199,6 +199,23 @@ class Network(tf.keras.Model):
         self.decayRadius(bmu)
         self.decayLearningRate(bmu)
 
+    def getPMI(self):
+        """
+        Accessor for the PMI of every unit in this SOM model
+
+        :return: PMI
+        :rtype: [unitsX, unitsY, n_Classes]
+        """
+        bmu_count = tf.reshape(self.class_count, 
+                               [-1, self.class_count.shape[-1]])
+        denom = tf.expand_dims(tf.reduce_sum(bmu_count, axis=1), axis=1)
+        conditional_probability = bmu_count / denom
+        prior = tf.reduce_sum(bmu_count, axis=0)
+        prior = prior / tf.reduce_sum(bmu_count)
+        pmi = conditional_probability / prior
+        pmi = tf.reshape(pmi, [self.unitsX, self.unitsY, -1])
+
+        return pmi
     
     def call(self, x, y):
         """
@@ -244,7 +261,7 @@ class Network(tf.keras.Model):
         config['shapeY'] = self.shapeY
         config['unitsX'] = self.unitsX
         config['unitsY'] = self.unitsY
-        config['class_count'] = self.class_count
+        config['pmi'] = self.getPMI()
         config['running_variance'] = self.running_variance
         config['radius'] = self.radius
         config['learning_rates'] = self.learning_rates
@@ -284,8 +301,9 @@ if __name__ == '__main__':
 
     # Declare a list of objects of SOM where each SOM runs on a split patch of an input sample
     networks = []
+    n_classes = 10
     for count in range(args.n_soms):
-        networks.append(Network(28, args.units, 10, 
+        networks.append(Network(28, args.units, n_classes, 
                                 args.radius, args.learning_rate, 
                                 args.variance, args.variance_alpha, 
                                 args.tau_radius, args.tau_lr
@@ -323,8 +341,8 @@ if __name__ == '__main__':
                      configs[count]['shapeY'], 
                      configs[count]['unitsX'], 
                      configs[count]['unitsY'], 
-                     configs[count]['class_count'], 
-                     10))
+                     configs[count]['pmi'], 
+                     n_classes))
         networks.pop(0)    
         tf.scatter_nd_update(labels, [[count]], [test_models[count].getPMI()])
     
@@ -342,25 +360,32 @@ if __name__ == '__main__':
     # delete test_samples
     del test_samples
 
-    predictions = []
-    labels = tf.Variable([])
+    predictions = tf.Variable([], dtype=tf.int32)
     tqdm.write("measuring test accuracy")
 
     for sample in tqdm(sample_patches):
-        dendSOM_predictions = tf.Variable([])
+        # PMI for BMU from every dendSOM
+        pmis = tf.zeros(n_classes)
+
+        # Test every dendSOM on an input test sample
         for count in range(args.n_som):
+            # forward pass for the test phase
             feature_map = test_models[count].layer1(configs[count]['som'],
                                                     sample.getImage())
+            # Get the best matching unit for test sample
             bmu = test_models[count].layer2(feature_map)
-            output = test_models[count].getPMI()
-            dendSOM_predictions = tf.concat([dendSOM_predictions, output],
-                                             axis=0)
-            
+            # Get the PMI of the bmu from the current dendSOM and 
+            # add it to store cumulative PMI of every label from every dendSOM
+            # pmi shape: [n_soms, n_classes]
+            pmis += test_models[count].get_bmu_PMIs(bmu)
+        # Calculate predicted label by performing argmax over PMI of every label
+        # concatenate the predicted label value in `predictions` tensor
+        predictions = tf.concat([predictions, tf.argmax(pmis)], axis=0)
     
-    predictions = tf.cast(predictions, dtype=tf.float32)
-    labels = tf.cast(labels, dtype=tf.float32)
+    predictions = tf.cast(predictions, dtype=tf.int32)
+    labels = tf.cast(labels, dtype=tf.int32)
     
-    accuracy = test_model.getAccuracy(predictions, labels) * 100
+    accuracy = util.getAccuracy(predictions, labels) * 100
     print("accuracy = ", accuracy)
 
     dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
