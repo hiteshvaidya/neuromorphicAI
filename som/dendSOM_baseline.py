@@ -313,16 +313,15 @@ if __name__ == '__main__':
     # Perform the forward pass
     for index in range(5):
         # Load the data as per choice of training
-        class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
+        task_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
 
-        batch_images = tf.convert_to_tensor([sample.getImage() 
-                                             for sample in class_train_samples])
         # split every image into patches
-        sample_patches = dataloader.splitImages(batch_images, args.patch_size)
-
+        task_samples = dataloader.splitImages(task_samples,
+                                              args.patch_size)
+        
         # fit/train the model on train samples
-        for count in range(args.n_som):
-            networks[count].fit(sample_patches[:, count, :, :], 
+        for count in range(args.n_soms):
+            networks[count].fit(task_samples[:, count, :, :], 
                                 folder_path, 
                                 index)
 
@@ -356,14 +355,12 @@ if __name__ == '__main__':
     labels = tf.convert_to_tensor([sample.getLabel() 
                                    for sample in test_samples])
     # split every image into patches
-    sample_patches = dataloader.splitImages(test_samples, args.patch_size)
-    # delete test_samples
-    del test_samples
+    test_samples = dataloader.splitImages(test_samples, args.patch_size)
 
     predictions = tf.Variable([], dtype=tf.int32)
     tqdm.write("measuring test accuracy")
 
-    for sample in tqdm(sample_patches):
+    for sample in tqdm(test_samples):
         # PMI for BMU from every dendSOM
         pmis = tf.zeros(n_classes)
 
@@ -371,7 +368,7 @@ if __name__ == '__main__':
         for count in range(args.n_som):
             # forward pass for the test phase
             feature_map = test_models[count].layer1(configs[count]['som'],
-                                                    sample.getImage())
+                                                    sample[count].getImage())
             # Get the best matching unit for test sample
             bmu = test_models[count].layer2(feature_map)
             # Get the PMI of the bmu from the current dendSOM and 
