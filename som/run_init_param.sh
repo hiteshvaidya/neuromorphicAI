@@ -20,5 +20,5 @@
 # CUDA_VISIBLE_DEVICES=5 python network.py -u 25 -v 0.5 -va 0.9 -r 1.5 -lr 0.07 -fp fashion_trial-5 -d fashion -tr 2 -tlr 40 &
 # CUDA_VISIBLE_DEVICES=6 python network.py -u 25 -v 0.5 -va 0.9 -r 1.5 -lr 0.07 -fp fashion_trial-6 -d fashion -tr 2 -tlr 35 &
 
-CUDA_VISIBLE_DEVICES=4 python dendSOM_baseline.py -u 10 -v 0.5 -va 0.9 -r 1.5 -lr 0.07 -fp dendSOM-trial-1 -d mnist -tr 8 -tlr 45 -n 4 -ps 14 
+CUDA_VISIBLE_DEVICES=9 python dendSOM_baseline.py -u 10 -v 0.5 -va 0.9 -r 1.5 -lr 0.07 -fp dendSOM-trial-1 -d mnist -tr 8 -tlr 45 -n 4 -ps 14 
 # CUDA_VISIBLE_DEVICES=6 python dendSOM_baseline.py -u 10 -v 0.5 -va 0.9 -r 1.5 -lr 0.07 -fp dendSOM-trial-2 -d mnist -tr 8 -tlr 45 -n 16 -ps 7 &r
