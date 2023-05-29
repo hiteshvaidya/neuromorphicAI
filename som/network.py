@@ -333,7 +333,7 @@ if __name__ == '__main__':
     predictions = tf.cast(tf.stack(predictions), dtype=tf.float32)
     labels = tf.cast(labels, dtype=tf.float32)
     
-    accuracy = test_model.getAccuracy(predictions, labels) * 100
+    accuracy = util.getAccuracy(predictions, labels) * 100
     print("accuracy = ", accuracy)
 
     dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
