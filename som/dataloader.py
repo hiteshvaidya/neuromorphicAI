@@ -271,3 +271,65 @@ def breakImages(samples, split_size):
     samples = np.asarray(samples)
     
     return samples
+
+def dump_cifar_channels(split, class_number, y_labels, 
+                        red_channel, green_channel, blue_channel):
+    """
+    save the channels of every cifar image at given location
+
+    :param split: 'train' or 'test' split
+    :type split: str
+    :param class_number: class number
+    :type class_number: int
+    :param y_labels: 'y_train' or 'y_test'
+    :type y_labels: numpy array
+    :param red_channel: array of red channel of all images
+    :type red_channel: [Nx32x32]
+    :param green_channel: array of green channel of all images
+    :type green_channel: [Nx32x32]
+    :param blue_channel: array of blue channel of all images
+    :type blue_channel: [Nx32x32]
+    """
+    # Get indices of images whose label == class_number
+    indices = np.where(y_labels == class_number)
+    
+    r_samples = []
+    g_samples = []
+    b_samples = []
+    # Form sample objects of every channel of every image
+    for index in indices:
+        r_samples.append(Sample(y_labels[index], red_channel[1], red_channel[2], red_channel[index, ...]))
+        g_samples.append(Sample(y_labels[index], green_channel[1], green_channel[2], green_channel[index, ...]))
+        b_samples.append(Sample(y_labels[index], blue_channel[1], blue_channel[2], blue_channel[index, ...]))
+    
+    # Dump sample objects of every channel of images belonging to give class_number
+    pkl.dump(np.asarray(r_samples), open(os.path.join('../data/cifar-10/', split, str(class_number), '-red_channel_samples.pkl')))
+    pkl.dump(np.asarray(g_samples), open(os.path.join('../data/cifar-10/', split, str(class_number), '-green_channel_samples.pkl')))
+    pkl.dump(np.asarray(b_samples), open(os.path.join('../data/cifar-10/', split, str(class_number), '-blue_channel_samples.pkl')))
+
+def splitCifarChannels():
+    """
+    Load RGB images from Cifar-10 and split them into RGB channels and save every channel of each image in sample object form at specified location
+    """
+    # Load the CIFAR-10 dataset
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+
+    # Split the images into Red, Green and Blue channels
+    red_channel = x_train[..., 0]
+    green_channel = x_train[..., 1]
+    blue_channel = x_train[..., 2]
+
+    # Form Sample objects for every channel of every image and save all the objects at specified location
+    for class_number in range(10):
+        dump_cifar_channels('train', class_number, y_train,
+                            red_channel, green_channel, blue_channel)
+    
+    # Repeat the above process for test images
+    red_channel = x_test[..., 0]
+    green_channel = x_test[..., 1]
+    blue_channel = x_test[..., 2]
+
+    for class_number in range(10):
+        dump_cifar_channels('test', class_number, y_test,
+                            red_channel, green_channel, blue_channel)
+        
