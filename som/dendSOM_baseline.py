@@ -321,7 +321,7 @@ if __name__ == '__main__':
         task_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
 
         # split every image into patches
-        task_samples = dataloader.splitImages(task_samples,
+        task_samples = dataloader.breakImages(task_samples,
                                               args.patch_size)
         
         # fit/train the model on train samples
@@ -358,7 +358,7 @@ if __name__ == '__main__':
     labels = tf.convert_to_tensor([sample.getLabel() 
                                    for sample in test_samples])
     # split every image into patches
-    test_samples = dataloader.splitImages(test_samples, args.patch_size)
+    test_samples = dataloader.breakImages(test_samples, args.patch_size)
 
     predictions = tf.Variable([], dtype=tf.int32)
     tqdm.write("measuring test accuracy")
