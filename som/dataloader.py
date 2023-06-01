@@ -229,9 +229,9 @@ def dumpSplitData(images, labels, nClasses, path):
         pkl.dump(samples, open(os.path.join(path, str(c) + ".pkl"), 'wb'))
     
 
-def splitImages(samples, split_size):
+def breakImages(samples, split_size):
     """
-    Split the dataset where each image is split into patches
+    Split the dataset where each image is broken into patches
 
     :param samples: dataset
     :type samples: list of sample objects
