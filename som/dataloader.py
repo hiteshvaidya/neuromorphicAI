@@ -15,6 +15,7 @@ import os
 import csv
 import json
 from sample import Sample
+from tqdm import tqdm
 
 def loadmnist():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
@@ -303,9 +304,9 @@ def dump_cifar_channels(split, class_number, y_labels,
         b_samples.append(Sample(y_labels[index], blue_channel[1], blue_channel[2], blue_channel[index, ...]))
     
     # Dump sample objects of every channel of images belonging to give class_number
-    pkl.dump(np.asarray(r_samples), open(os.path.join('../data/cifar-10/', split, str(class_number), '-red_channel_samples.pkl')))
-    pkl.dump(np.asarray(g_samples), open(os.path.join('../data/cifar-10/', split, str(class_number), '-green_channel_samples.pkl')))
-    pkl.dump(np.asarray(b_samples), open(os.path.join('../data/cifar-10/', split, str(class_number), '-blue_channel_samples.pkl')))
+    pkl.dump(np.asarray(r_samples), open(os.path.join('../data/cifar-10/', split, str(class_number) + '-red_channel_samples.pkl'), 'wb'))
+    pkl.dump(np.asarray(g_samples), open(os.path.join('../data/cifar-10/', split, str(class_number) + '-green_channel_samples.pkl'), 'wb'))
+    pkl.dump(np.asarray(b_samples), open(os.path.join('../data/cifar-10/', split, str(class_number) + '-blue_channel_samples.pkl'), 'wb'))
 
 def splitCifarChannels():
     """
@@ -320,7 +321,8 @@ def splitCifarChannels():
     blue_channel = x_train[..., 2]
 
     # Form Sample objects for every channel of every image and save all the objects at specified location
-    for class_number in range(10):
+    tqdm.write('saving train set')
+    for class_number in tqdm(range(10)):
         dump_cifar_channels('train', class_number, y_train,
                             red_channel, green_channel, blue_channel)
     
@@ -329,7 +331,8 @@ def splitCifarChannels():
     green_channel = x_test[..., 1]
     blue_channel = x_test[..., 2]
 
-    for class_number in range(10):
+    tqdm.write('saving test set')
+    for class_number in tqdm(range(10)):
         dump_cifar_channels('test', class_number, y_test,
                             red_channel, green_channel, blue_channel)
         
