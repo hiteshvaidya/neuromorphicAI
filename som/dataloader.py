@@ -55,7 +55,7 @@ def loadjson(filepath):
         data = json.load(fp)
     return data
 
-def loadSplitData(path, class_number, cifar):
+def loadSplitData(path, class_number):
     """
     Load class specific data
 
