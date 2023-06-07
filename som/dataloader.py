@@ -55,7 +55,7 @@ def loadjson(filepath):
         data = json.load(fp)
     return data
 
-def loadSplitData(path, class_number):
+def loadSplitData(path, class_number, cifar):
     """
     Load class specific data
 
@@ -189,6 +189,26 @@ def loadCifarTestData(path):
 
     return samples
 
+def loadCifarTestChannels(folder):
+    """
+    load channel specific test data of cifar
+
+    :param folder: folder path
+    :type folder: str
+    :return: sample objects of all classes
+    :rtype: numpy array
+    """
+    # list all files
+    files = os.listdir(folder)
+
+    test_samples = []
+    for file in files:
+        file_path = os.path.join(folder, file)
+        samples = pkl.load(open(file, 'rb'))
+        test_samples.extend(samples)
+    test_samples = np.asarray(test_samples)
+    return test_samples
+
 def loadDomainIncremental(path, taskNumber, taskSize):
     samples = np.array([])
     for idx,t in enumerate(range(taskNumber*taskSize, (taskNumber+1)*taskSize)):
@@ -304,9 +324,15 @@ def dump_cifar_channels(split, class_number, y_labels,
         b_samples.append(Sample(y_labels[index], blue_channel[1], blue_channel[2], blue_channel[index, ...]))
     
     # Dump sample objects of every channel of images belonging to give class_number
-    pkl.dump(np.asarray(r_samples), open(os.path.join('../data/cifar-10/', split, str(class_number) + '-red_channel_samples.pkl'), 'wb'))
-    pkl.dump(np.asarray(g_samples), open(os.path.join('../data/cifar-10/', split, str(class_number) + '-green_channel_samples.pkl'), 'wb'))
-    pkl.dump(np.asarray(b_samples), open(os.path.join('../data/cifar-10/', split, str(class_number) + '-blue_channel_samples.pkl'), 'wb'))
+    if not os.path.isdir(os.path.join('../data/cifar-10/', split, 'red_channel_samples')):
+        os.makedirs(os.path.join('../data/cifar-10/', split, 'red_channel_samples'))
+    if not os.path.isdir(os.path.join('../data/cifar-10/', split, 'green_channel_samples')):
+        os.makedirs(os.path.join('../data/cifar-10/', split, 'green_channel_samples'))
+    if not os.path.isdir(os.path.join('../data/cifar-10/', split, 'blue_channel_samples')):
+        os.makedirs(os.path.join('../data/cifar-10/', split, 'blue_channel_samples'))
+    pkl.dump(np.asarray(r_samples), open(os.path.join('../data/cifar-10/', split, 'red_channel_samples', str(class_number) + '.pkl'), 'wb'))
+    pkl.dump(np.asarray(g_samples), open(os.path.join('../data/cifar-10/', split, 'green_channel_samples', str(class_number) + '.pkl'), 'wb'))
+    pkl.dump(np.asarray(b_samples), open(os.path.join('../data/cifar-10/', split, 'blue_channel_samples', str(class_number) + '.pkl'), 'wb'))
 
 def splitCifarChannels():
     """
