@@ -67,13 +67,17 @@ def loadSplitData(path, class_number):
     :rtype: numpy array of Sample() objects
     """
     samples = pkl.load(open(os.path.join(path, str(class_number) + ".pkl"), 'rb'))
+    print("path: ", os.path.join(path, str(class_number) + ".pkl"))
+    print("samples at path: ", samples.shape)
     return samples
 
 def loadClassIncremental(path, taskNumber, taskSize):
     samples = np.array([])
     for t in range(taskNumber*taskSize, (taskNumber+1)*taskSize):
         task_samples = loadSplitData(path, t)
+        print('task_samples: ', task_samples.shape)
         samples = np.concatenate([samples, task_samples])
+    print("loaded samples: ", samples.shape)
     np.random.shuffle(samples)
     return samples
 
@@ -312,7 +316,7 @@ def dump_cifar_channels(split, class_number, y_labels,
     :type blue_channel: [Nx32x32]
     """
     # Get indices of images whose label == class_number
-    indices = np.where(y_labels == class_number)
+    indices = np.where(y_labels == class_number)[0]
     
     r_samples = []
     g_samples = []
@@ -330,6 +334,9 @@ def dump_cifar_channels(split, class_number, y_labels,
         os.makedirs(os.path.join('../data/cifar-10/', split, 'green_channel_samples'))
     if not os.path.isdir(os.path.join('../data/cifar-10/', split, 'blue_channel_samples')):
         os.makedirs(os.path.join('../data/cifar-10/', split, 'blue_channel_samples'))
+    print('r_samples: ', len(r_samples))
+    print('g_samples: ', len(g_samples))
+    print('b_samples: ', len(b_samples))
     pkl.dump(np.asarray(r_samples), open(os.path.join('../data/cifar-10/', split, 'red_channel_samples', str(class_number) + '.pkl'), 'wb'))
     pkl.dump(np.asarray(g_samples), open(os.path.join('../data/cifar-10/', split, 'green_channel_samples', str(class_number) + '.pkl'), 'wb'))
     pkl.dump(np.asarray(b_samples), open(os.path.join('../data/cifar-10/', split, 'blue_channel_samples', str(class_number) + '.pkl'), 'wb'))
