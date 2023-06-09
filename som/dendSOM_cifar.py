@@ -176,7 +176,10 @@ class Network(tf.keras.Model):
 
         # clip the values of SOM
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
-
+        print("bmu: ", type(bmu[0]))
+        print('label: ', type(label))
+        print('class_count: ', self.class_count.dtype)
+        print('self.class_count[bmu[0], bmu[1], label]: ', self.class_count[bmu[0], bmu[1], label])
         self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
 
         # we need some alpha value to update running variance 
@@ -224,9 +227,12 @@ class Network(tf.keras.Model):
         :param x: input image
         :type x: matrix of float values
         """
+        print("x: ", x.shape)
+        print('y: ', y.shape)
         tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
         bmu = self.layer2(unit_map)
-        self.weight_update(bmu, tiled_input, y)
+        print('y = ', y)
+        self.weight_update(bmu, tiled_input, y[0])
     
     def fit(self, train_samples, folder_path, index):
         """
@@ -240,8 +246,9 @@ class Network(tf.keras.Model):
         :type index: int
         """
         tqdm.write("fitting model for task " + str(index))
-        for cursor, sample in tqdm(enumerate(train_samples)):
-            # forward pass
+        print("length of train_samples: ", len(train_samples))
+        for cursor, sample in (enumerate(train_samples)):
+            # forward pass 
             self(sample.getImage(), sample.getLabel())
             
         # save the image of current state of SOM
@@ -317,11 +324,11 @@ if __name__ == '__main__':
 
     # Perform the forward pass
     for index in range(5):
-        colors = {'red', 'green', 'blue'}
+        colors = ['red', 'green', 'blue']
         # fit/train the model on train samples
         for count in range(args.n_soms):
             # Load the data as per choice of training
-            samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", colors[count]+'_channel_samples', str(index), 2)
+            samples = dataloader.loadClassIncremental(os.path.join("../data/" + args.dataset + "/train/", colors[count]+'_channel_samples'), index, 2)
             networks[count].fit(samples, 
                                 folder_path, 
                                 colors[count]+'-'+str(index))
