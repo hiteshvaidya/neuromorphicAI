@@ -14,6 +14,7 @@ import dataloader
 import tensorflow as tf
 import os
 from testSOM import testClass
+import util
 
 def create_class_incremental_model(units, radius, learning_rate, variance, variance_alpha, tau_radius, tau_lr):
     """
@@ -131,7 +132,7 @@ if __name__ == '__main__':
         predictions = tf.cast(tf.stack(predictions), dtype=tf.float32)
         labels = tf.cast(labels, dtype=tf.float32)
         
-        accuracy = test_model.getAccuracy(predictions, labels) * 100
+        accuracy = util.getAccuracy(predictions, labels) * 100
 
         if accuracy > best_accuracy:
             best_accuracy = accuracy
