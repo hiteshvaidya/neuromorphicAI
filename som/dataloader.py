@@ -67,17 +67,13 @@ def loadSplitData(path, class_number):
     :rtype: numpy array of Sample() objects
     """
     samples = pkl.load(open(os.path.join(path, str(class_number) + ".pkl"), 'rb'))
-    print("path: ", os.path.join(path, str(class_number) + ".pkl"))
-    print("samples at path: ", samples.shape)
     return samples
 
 def loadClassIncremental(path, taskNumber, taskSize):
     samples = np.array([])
     for t in range(taskNumber*taskSize, (taskNumber+1)*taskSize):
         task_samples = loadSplitData(path, t)
-        print('task_samples: ', task_samples.shape)
         samples = np.concatenate([samples, task_samples])
-    print("loaded samples: ", samples.shape)
     np.random.shuffle(samples)
     return samples
 
@@ -192,6 +188,23 @@ def loadCifarTestData(path):
                                     )
 
     return samples
+
+def loadCifarTestSamples(folder_path):
+    """
+    Load RGB test samples of CIFAR-10 in iid form
+
+    :param folder_path: folder path
+    :type folder_path: str
+    :return: samples
+    :rtype: numpy array of Sample() objects
+    """
+    test_samples = np.array([])
+    for file in os.listdir(folder_path):
+        samples = pkl.load(open(os.path.join(folder_path, file), 'rb'))
+        test_samples = np.concatenate([test_samples, 
+                                       pkl.load(open(os.path.join(folder_path, file), 'rb'))])
+    np.random.shuffle(test_samples)
+    return test_samples
 
 def loadCifarTestChannels(folder):
     """
@@ -334,12 +347,38 @@ def dump_cifar_channels(split, class_number, y_labels,
         os.makedirs(os.path.join('../data/cifar-10/', split, 'green_channel_samples'))
     if not os.path.isdir(os.path.join('../data/cifar-10/', split, 'blue_channel_samples')):
         os.makedirs(os.path.join('../data/cifar-10/', split, 'blue_channel_samples'))
-    print('r_samples: ', len(r_samples))
-    print('g_samples: ', len(g_samples))
-    print('b_samples: ', len(b_samples))
     pkl.dump(np.asarray(r_samples), open(os.path.join('../data/cifar-10/', split, 'red_channel_samples', str(class_number) + '.pkl'), 'wb'))
     pkl.dump(np.asarray(g_samples), open(os.path.join('../data/cifar-10/', split, 'green_channel_samples', str(class_number) + '.pkl'), 'wb'))
     pkl.dump(np.asarray(b_samples), open(os.path.join('../data/cifar-10/', split, 'blue_channel_samples', str(class_number) + '.pkl'), 'wb'))
+
+def saveCifarImages():
+    """
+    Load cifar-10 images and save them class wise in the form of
+    list of Sample() objects
+    """
+    # Load the CIFAR-10 dataset
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+    x_train = x_train.astype('float32') / 255.0 
+    x_test = x_test.astype('float32') / 255.0 
+
+    if not os.path.isdir(os.path.join('../data/cifar-10/train/colored')):
+        os.makedirs(os.path.join('../data/cifar-10/train/colored'))
+        os.makedirs(os.path.join('../data/cifar-10/test/colored'))
+    
+    for c in range(10):
+        indices = np.where(y_train == c)[0]
+        samples = []
+        for index in indices:
+            samples.append(Sample(y_train[index][0].astype(np.int32), 32, 32, x_train[index]))
+        pkl.dump(np.asarray(samples), open(os.path.join("../data/cifar-10/train/colored/", str(c)+'.pkl'), 'wb'))
+
+        indices = np.where(y_test == c)[0]
+        samples = []
+        for index in indices:
+            samples.append(Sample(y_test[index][0].astype(np.int32), 
+                                  32, 32, x_test[index]))
+        pkl.dump(np.asarray(samples), open(os.path.join("../data/cifar-10/test/colored/", str(c)+'.pkl'), 'wb'))
+        
 
 def splitCifarChannels():
     """
@@ -347,11 +386,13 @@ def splitCifarChannels():
     """
     # Load the CIFAR-10 dataset
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
-
+    x_train = x_train.astype('float32') / 255.0 
+    x_test = x_test.astype('float32') / 255.0 
+    
     # Split the images into Red, Green and Blue channels
-    red_channel = x_train[..., 0]
+    red_channel = x_train[..., 0] 
     green_channel = x_train[..., 1]
-    blue_channel = x_train[..., 2]
+    blue_channel = x_train[..., 2] 
 
     # Form Sample objects for every channel of every image and save all the objects at specified location
     tqdm.write('saving train set')

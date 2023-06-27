@@ -41,20 +41,21 @@ class Network(tf.keras.Model):
         """
         super(Network, self).__init__()
         st = time.time()
+        n_units = int(n_units)
         # Total number of pixels in a row and column of SOM
         self.shapeX = imgSize * n_units
         self.shapeY = imgSize * n_units
 
         # Total number of units in the SOM
-        self.unitsX = n_units
-        self.unitsY = n_units
-
+        self.unitsX = n_units # tf.cast(n_units, tf.int32)
+        self.unitsY = n_units # tf.cast(n_units, tf.int32)
+        print('unitsX, unitsY: ', self.unitsX, self.unitsY)
         # randomly initialize every unit (n_units * n_units) in the SOM
         units = []
         for _ in range(self.unitsX * self.unitsY):
             current_time = time.time() - st
             units.append(tf.random.normal([28, 28], mean=0.4, stddev=0.3, seed=current_time))
-        
+        print('units: ', len(units))
         # stack the units along rows and columns or reshape to form the SOM
         self.som = tf.concat([tf.concat(units_col, axis=1) for units_col in tf.split(units, self.unitsX)], axis=0)
         # reshape the SOM

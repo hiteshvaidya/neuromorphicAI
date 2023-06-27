@@ -176,10 +176,6 @@ class Network(tf.keras.Model):
 
         # clip the values of SOM
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
-        print("bmu: ", type(bmu[0]))
-        print('label: ', type(label))
-        print('class_count: ', self.class_count.dtype)
-        print('self.class_count[bmu[0], bmu[1], label]: ', self.class_count[bmu[0], bmu[1], label])
         self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
 
         # we need some alpha value to update running variance 
@@ -227,14 +223,11 @@ class Network(tf.keras.Model):
         :param x: input image
         :type x: matrix of float values
         """
-        print("x: ", x.shape)
-        print('y: ', y.shape)
         tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
         bmu = self.layer2(unit_map)
-        print('y = ', y)
-        self.weight_update(bmu, tiled_input, y[0])
+        self.weight_update(bmu, tiled_input, y)
     
-    def fit(self, train_samples, folder_path, index):
+    def fit(self, train_samples, folder_path, index, channel):
         """
         Train the model
 
@@ -244,12 +237,14 @@ class Network(tf.keras.Model):
         :type folder_path: str
         :param index: current task index
         :type index: int
+        :param channel: channel to be trained on
+        :type channel: int
         """
         tqdm.write("fitting model for task " + str(index))
-        print("length of train_samples: ", len(train_samples))
-        for cursor, sample in (enumerate(train_samples)):
+        for cursor, sample in tqdm(enumerate(train_samples)):
             # forward pass 
-            self(sample.getImage(), sample.getLabel())
+            image = sample.getImage()
+            self(image[..., channel], sample.getLabel())
             
         # save the image of current state of SOM
         self.saveImage(folder_path, index)
@@ -307,7 +302,6 @@ if __name__ == '__main__':
     folder_path = os.path.join(os.getcwd(), 'logs', args.filepath)
     if not os.path.exists(folder_path):
         os.makedirs(folder_path)
-    print("folder_path: ", folder_path)
 
     # Declare a list of objects of SOM where each SOM runs on a split patch of an input sample
     networks = []
@@ -328,10 +322,11 @@ if __name__ == '__main__':
         # fit/train the model on train samples
         for count in range(args.n_soms):
             # Load the data as per choice of training
-            samples = dataloader.loadClassIncremental(os.path.join("../data/" + args.dataset + "/train/", colors[count]+'_channel_samples'), index, 2)
+            samples = dataloader.loadClassIncremental(os.path.join("../data/" + args.dataset + "/train/colored/"), index, 2)
             networks[count].fit(samples, 
                                 folder_path, 
-                                colors[count]+'-'+str(index))
+                                colors[count]+'-'+str(index),
+                                count)
 
     # Destroy all cv2 windows
     # cv2.destroyAllWindows()
@@ -356,27 +351,28 @@ if __name__ == '__main__':
     # labels = tf.argmax(labels, axis=0)
     
     # load test samples
-    test_samples = {0, 1, 2}
-    test_samples[0] = dataloader.loadCifarTestChannels(os.path.join("../data",
-                                                                     args.dataset,
-                                                                     'test',
-                                                                     'red_channel_samples'))
-    test_samples[1] = dataloader.loadCifarTestChannels(os.path.join("../data",
-                                                                     args.dataset,
-                                                                     'test',
-                                                                     'green_channel_samples'))
-    test_samples[2] = dataloader.loadCifarTestChannels(os.path.join("../data",
-                                                                     args.dataset,
-                                                                     'test',
-                                                                     'blue_channel_samples'))
-
-    indices = tf.random.shuffle(tf.range(test_samples[0].shape[0]))
+    # test_samples = {0, 1, 2}
+    # test_samples[0] = dataloader.loadCifarTestChannels(os.path.join("../data",
+    #                                                                  args.dataset,
+    #                                                                  'test',
+    #                                                                  'red_channel_samples'))
+    # test_samples[1] = dataloader.loadCifarTestChannels(os.path.join("../data",
+    #                                                                  args.dataset,
+    #                                                                  'test',
+    #                                                                  'green_channel_samples'))
+    # test_samples[2] = dataloader.loadCifarTestChannels(os.path.join("../data",
+    #                                                                  args.dataset,
+    #                                                                  'test',
+    #                                                                  'blue_channel_samples'))
+    # indices = tf.random.shuffle(tf.range(test_samples[0].shape[0]))
+    
+    test_samples = dataloader.loadCifarTestSamples(os.path.join('../data', args.dataset, 'test', 'colored'))
     
     predictions = tf.Variable([])
-    labels = tf.Variable([])
+    labels = tf.Variable([], dtype=tf.int32)
 
     tqdm.write("measuring test accuracy")
-    for index in tqdm(indices):
+    for sample in tqdm(test_samples):
         # PMI for BMU from every dendSOM
         pmis = tf.zeros(n_classes)
 
@@ -384,7 +380,7 @@ if __name__ == '__main__':
         for count in range(args.n_soms):
             # forward pass for the test phase
             feature_map = test_models[count].layer1(configs[count]['som'],
-                                                    test_samples[count][index].getImage())
+                                                    sample.getImage()[..., count])
             # Get the best matching unit for test sample
             bmu = test_models[count].layer2(feature_map)
             # Get the PMI of the bmu from the current dendSOM and 
@@ -395,7 +391,9 @@ if __name__ == '__main__':
         # concatenate the predicted label value in `predictions` tensor
         predictions = tf.concat([predictions, 
                                  [tf.argmax(pmis, output_type=tf.dtypes.int32)]], axis=0)
-        labels = tf.concat([labels, test_samples[0][index].getLabel()])
+        
+        labels = tf.concat([labels, 
+                            tf.Variable([sample.getLabel()], dtype=tf.int32)], axis=0)
     
     predictions = tf.cast(predictions, dtype=tf.int32)
     labels = tf.cast(labels, dtype=tf.int32)
