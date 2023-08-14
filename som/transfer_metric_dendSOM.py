@@ -22,6 +22,7 @@ from testSOM import testClass
 from tqdm import tqdm
 import json
 import multiprocessing
+import pickle as pkl
 from datetime import datetime
 import concurrent.futures
 
@@ -221,17 +222,13 @@ class Network(tf.keras.Model):
         :type folder_path: str
         :param index: current task index
         :type index: int
-        :param task_size: number of classes in a task/domain
-        :type task_size: int
-        :param training_type: 'class' / 'domain'
-        :type training_type: str
         """
         tqdm.write("fitting model for task " + str(index))
         for cursor, sample in tqdm(enumerate(train_samples)):
+            # forward pass
             label = util.getTrainingLabel(sample.getLabel(),
                                           task_size,
                                           training_type)
-            # forward pass
             self(sample.getImage(), label)
             
         # save the image of current state of SOM
@@ -259,7 +256,8 @@ class Network(tf.keras.Model):
         config['tau_lr'] = self.tau_lr
 
         return config
-    
+
+
 def fit_model(model, samples, folder_path, index, task_size, training_type):
     model.fit(samples, folder_path, index, task_size, training_type)
 
@@ -277,12 +275,12 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--variance', type=float, required=False, default=0.5, help='initial value of running variance')
     parser.add_argument('-fp', '--filepath', type=str, required=False, default=None, help='filepath for saving trained SOM model')
     parser.add_argument('-d', '--dataset', type=str, default=None, help='dataset type mnist/fashion/kmnist/cifar')
-    parser.add_argument('-nt', '--n_tasks', type=int, default=10, help='number of tasks in incremental training')
-    parser.add_argument('-ts', '--task_size', type=int, default=1, help='number of classes per task in incremental training')
-    parser.add_argument('-t', '--training_type', type=str, default='class', help='class incremental or domain incremental training')
     parser.add_argument('-tr', '--tau_radius', type=float, default=None, help='tau constant for decaying radius')
     parser.add_argument('-tlr', '--tau_lr', type=float, default=None, help='tau constant for decaying learning rate')
     parser.add_argument('-n', '--n_soms', type=int, required=True, default=None, help='number of SOMs')
+    parser.add_argument('-nt', '--n_tasks', type=int, default=10, help='number of tasks in incremental training')
+    parser.add_argument('-ts', '--task_size', type=int, default=1, help='number of classes per task in incremental training')
+    parser.add_argument('-t', '--training_type', type=str, default='class', help='class incremental or domain incremental training')
     parser.add_argument('-us', '--unit_size', type=int, required=True, default=None, help='size of each patch of an image')
     args = parser.parse_args()
     
@@ -298,6 +296,9 @@ if __name__ == '__main__':
         os.makedirs(folder_path)
     print("folder_path: ", folder_path)
 
+    # Declare a list of objects of SOM where each SOM runs on a split patch of an input sample
+    networks = []
+    network_ids = []
     # number of classes in complete training
     n_classes = 0
     if args.training_type == 'class':
@@ -305,9 +306,6 @@ if __name__ == '__main__':
     elif args.training_type == 'domain':
         n_classes = args.task_size
 
-    # Declare a list of objects of SOM where each SOM runs on a split patch of an input sample
-    networks = []
-    network_ids = []
     for count in range(args.n_soms):
         networks.append(Network(args.unit_size, args.units, n_classes, 
                                 args.radius, args.learning_rate, 
@@ -317,10 +315,20 @@ if __name__ == '__main__':
                         )
         network_ids.append(count)
 
-    # Create a ThreadPoolExecutor with the desired number of threads
-    # Adjust the number of threads based on the number of models and your system resources
-    num_threads = args.n_soms
+    b = util.dendSOMTaskAccuracy(networks, 
+                             args.dataset, 
+                             args.unit_size, 
+                             args.n_tasks,
+                             args.task_size,
+                             args.n_soms,
+                             args.training_type)
     
+    print('b = ', b)
+
+
+    final_accuracies = tf.constant([], dtype=tf.float32, shape=(0, n_classes))
+    num_threads = args.n_soms
+
     # Perform the forward pass
     for index in range(args.n_tasks):
         # Load the data as per choice of training
@@ -333,18 +341,17 @@ if __name__ == '__main__':
             train_samples = dataloader.loadDomainIncremental(
                 os.path.join("../data", args.dataset, "train"), 
                 index, args.task_size)
-
-        # split every image into patches
-        task_samples = dataloader.breakImages(train_samples,
-                                              args.unit_size)
         
+        # split every image into patches
+        train_samples = dataloader.breakImages(train_samples,
+                                              args.unit_size)
         
         # fit/train the model on train samples
         with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
             # Submit the 'fit_model' function for each model in the list
             futures = [executor.submit(fit_model, 
                                        networks[count], 
-                                       task_samples[:, count],
+                                       train_samples[:, count],
                                        folder_path,
                                        index,
                                        args.task_size,
@@ -353,75 +360,62 @@ if __name__ == '__main__':
 
             # Wait for all futures (fitting processes) to complete
             concurrent.futures.wait(futures)
+
+        # fit/train the model on train samples
         # for count in range(args.n_soms):
-        #     networks[count].fit(task_samples[:, count], 
+        #     networks[count].fit(train_samples[:, count], 
         #                         folder_path, 
         #                         index,
         #                         args.task_size,
         #                         args.training_type)
 
-    # save the trained model
-    
-    test_models = []
-    config = None
+        task_accuracy = util.dendSOMTaskAccuracy(networks, 
+                                                 args.dataset, 
+                                                 args.unit_size, 
+                                                 args.n_tasks,
+                                                 args.task_size, 
+                                                 args.n_soms,
+                                                 args.training_type)
+        final_accuracies = tf.concat([final_accuracies, 
+                                tf.reshape(task_accuracy, [1, -1])], 
+                                axis=0)
+
     for count in range(args.n_soms):
         config = networks[count].getConfig()
-        test_models.append(testClass(config['som'], 
-                     config['shapeX'], 
-                     config['shapeY'], 
-                     config['unitsX'], 
-                     config['unitsY'], 
-                     config['class_count'], 
-                     n_classes))
-        test_models[count].setPMI()
-        dataloader.saveModel(config, os.path.join(folder_path, 'model_config-' + str(count) + '.pkl'))
-    del networks 
+        pkl.dump(config, 
+                open(os.path.join(folder_path, 
+                                  'model_config-' + str(count) + '.pkl'
+                                  ), 
+                    'wb')
+                )
+    del networks
+    
+    fwt = util.getFWT(final_accuracies, b)
+    bwt = util.getBWT(final_accuracies)
+    avgAccuracy = util.getAverageAccuracy(final_accuracies)
+    learningAccuracy = util.getLearningAccuracy(final_accuracies)
+    forgettingMeasure = util.getForgettingMeasure(final_accuracies)
+
+    print('b = ', b)
+    print('fwt: ', fwt)
+    print('bwt: ', bwt)
+    print('average accuracy: ', avgAccuracy)
+    print('learning accuracy: ', learningAccuracy)
+    print('forgetting measure: ', forgettingMeasure)
         
-        # tf.scatter_nd_update(labels, [[count]], [test_models[count].getPMI()])
+    output_path = os.path.join(folder_path, 'transfer_metrics.csv')
     
-    # labels = tf.argmax(labels, axis=0)
-    
-    # load test samples
-    test_samples = dataloader.loadNistTestData("../data/" + args.dataset)
-    # collect labels of test_samples
-    labels = tf.convert_to_tensor([util.getTrainingLabel(sample.getLabel(),
-                                                        args.task_size, 
-                                                        args.training_type) 
-                                   for sample in test_samples])
-    # split every image into patches
-    test_samples = dataloader.breakImages(test_samples, args.unit_size)
+    numpy_array = final_accuracies.numpy()
+    np.savetxt(output_path, numpy_array, delimiter=', ', fmt='%.4f')
 
-    predictions = tf.Variable([], dtype=tf.int32)
-    tqdm.write("measuring test accuracy")
-
-    for sample in tqdm(test_samples):
-        # PMI for BMU from every dendSOM
-        pmis = tf.zeros(n_classes)
-
-        # Test every dendSOM on an input test sample
-        for count in range(args.n_soms):
-            # forward pass for the test phase
-            feature_map = test_models[count].layer1(config['som'],
-                                                    sample[count].getImage())
-            # Get the best matching unit for test sample
-            bmu = test_models[count].layer2(feature_map)
-            # Get the PMI of the bmu from the current dendSOM and 
-            # add it to store cumulative PMI of every label from every dendSOM
-            # pmi shape: [n_soms, n_classes]
-            pmis += test_models[count].get_bmu_PMI(bmu)
-        # Calculate predicted label by performing argmax over PMI of every label
-        # concatenate the predicted label value in `predictions` tensor
-        output = tf.math.argmax(pmis, output_type=tf.dtypes.int32)
-        predictions = tf.concat([predictions, 
-                                 [output]], axis=0)
-    
-    predictions = tf.cast(predictions, dtype=tf.int32)
-    labels = tf.cast(labels, dtype=tf.int32)
-    
-    accuracy = util.getAccuracy(predictions, labels) * 100
-    print("accuracy = ", accuracy)
-
-    dataloader.writeAccuracy(os.path.join(folder_path, 'accuracy.txt'), accuracy)
+    with open(os.path.join(folder_path, 'tranfer_metrics.txt'), 'w') as fp:
+        fp.write('b = ' + ", ".join([str(x) for x in b]) + '\n')
+        fp.write('fwt = ' + str(fwt) + '\n')
+        fp.write('bwt = ' + str(bwt) + '\n')
+        fp.write('average accuracy = ' + str(avgAccuracy) + '\n')
+        fp.write('learning accuracy = ' + str(learningAccuracy) + '\n')
+        fp.write('forgetting measure: ' + str(forgettingMeasure))
 
     end = datetime.now()
+    
     print("execution time: ", (end-begin).total_seconds() / 60)

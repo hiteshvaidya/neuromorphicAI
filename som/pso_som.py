@@ -11,7 +11,7 @@ from pyswarm import pso
 import util
 
 counter = 0
-dataset_choice = 'mnist'
+dataset_choice = 'kmnist'
 
 def objective_function(model_config):
     # test SOM

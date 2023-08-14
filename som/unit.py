@@ -76,11 +76,16 @@ class Unit(object):
         self.values = tf.clip_by_value(self.values, lower, upper)
 
     def resetClassStats(self):
-        self.class_stats = tf.zeros(n_types)
+        self.class_stats = tf.zeros(self.n_types)
 
     def endEpoch(self, number_samples):
         self.variance /= number_samples
 
     def getPredictedClass(self):
-        predictedClass = tf.argmax(self.class_stats)
-        return predictedClass
+        # if tf.math.reduce_max(self.class_stats) == 0:
+        #     return -1
+        # predictedClass = tf.argmax(self.class_stats)
+        return self.predictedClass
+    
+    def setPredictedClass(self, value):
+        self.predictedClass = value
