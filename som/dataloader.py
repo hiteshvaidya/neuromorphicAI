@@ -110,7 +110,32 @@ def generateSamples(images, labels, shapeX, shapeY):
     samples = np.asarray(samples)
     return samples
 
-def loadNistTestData(path):
+def convertToClassIncremental(nClasses, test_images, test_labels):
+    test_samples = []
+    for c in range(nClasses):
+        indexes = np.where(test_labels == c)
+        samples = generateSamples(test_images[indexes],
+                                  test_labels[indexes],
+                                  test_images[indexes].shape[1],
+                                  test_images[indexes].shape[2])
+        test_samples.append(samples)
+    test_samples = np.asarray(test_samples)
+    return test_samples
+
+def convertToTaskIncremental(nTasks, taskSize, test_images, test_labels):
+    test_samples = []
+    for t in range(nTasks):
+        indexes = np.where((test_labels >= t*taskSize) & 
+                           (test_labels < (t+1)*taskSize))
+        samples = generateSamples(test_images[indexes],
+                                  test_labels[indexes],
+                                  test_images[indexes].shape[1],
+                                  test_images[indexes].shape[2])
+        test_samples.append(samples)
+    test_samples = np.asarray(test_samples)
+    return test_samples
+
+def loadNistTestData(path, trainingType, nTasks, taskSize):
     """
     For either of MNIST, FashionMNIST, KMNIST:
     load test images and labels from their idx files
@@ -127,11 +152,21 @@ def loadNistTestData(path):
     # test_labels is 1D numpy array
     test_labels = idx2numpy.convert_from_file(os.path.join(path, 't10k-labels-idx1-ubyte')) 
 
-    samples = generateSamples(test_images, 
-                                    test_labels,
-                                    test_images.shape[1], 
-                                    test_images.shape[2]
-                                    )
+    samples = None
+    if trainingType == 'class':
+        samples = convertToClassIncremental(nTasks*taskSize,
+                                            test_images,
+                                            test_labels)
+    else:
+        samples = convertToTaskIncremental(nTasks,
+                                           taskSize,
+                                           test_images,
+                                           test_labels)
+    # samples = generateSamples(test_images, 
+    #                                 test_labels,
+    #                                 test_images.shape[1], 
+    #                                 test_images.shape[2]
+    #                                 )
 
     return samples
 
@@ -230,8 +265,9 @@ def loadDomainIncremental(path, taskNumber, taskSize):
     samples = np.array([])
     for idx,t in enumerate(range(taskNumber*taskSize, (taskNumber+1)*taskSize)):
         task_samples = loadSplitData(path, t)
+        
         for s in range(task_samples.shape[0]):
-            task_samples[s].setLabel(idx)
+            task_samples[s].setLabel(t%taskSize)
         samples = np.concatenate([samples, task_samples])
     np.random.shuffle(samples)
     return samples

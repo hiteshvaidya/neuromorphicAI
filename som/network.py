@@ -54,7 +54,7 @@ class Network(tf.keras.Model):
         units = []
         for _ in range(self.unitsX * self.unitsY):
             current_time = time.time() - st
-            units.append(tf.random.normal([28, 28], mean=0.4, stddev=0.3, seed=current_time))
+            units.append(tf.random.normal([imgSize, imgSize], mean=0.4, stddev=0.3, seed=current_time))
         print('units: ', len(units))
         # stack the units along rows and columns or reshape to form the SOM
         self.som = tf.concat([tf.concat(units_col, axis=1) for units_col in tf.split(units, self.unitsX)], axis=0)
@@ -64,7 +64,7 @@ class Network(tf.keras.Model):
         # clip values between 0 and 1
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
 
-        # class_count for every unit i.e. how many number of times a unit was selected as BMU for every class in the dataset
+        # Hit matrix or class_count for every unit i.e. how many number of times a unit was selected as BMU for every class in the dataset
         self.class_count = tf.zeros([n_units, n_units, n_classes])
 
         # Initialize the matrix for running variance
@@ -104,6 +104,20 @@ class Network(tf.keras.Model):
         self.radius = tf.math.maximum(0.00001 * tf.ones(
                                         tf.shape(self.radius)), 
                                         self.radius)
+    
+    def vanillaDecayRadius(self, timeStep):
+        decay = self.initial_radius * tf.exp(-timeStep / 10E5)
+        self.radius = decay * tf.ones([self.unitsX, self.unitsY])
+        self.radius = tf.math.maximum(10E-6 * tf.ones(
+                                    tf.shape(self.radius)), 
+                                    self.radius)
+    
+    def vanillaDecayLearningRate(self, timeStep):
+        decay = self.initial_learning_rates * tf.exp(-timeStep / 10E4)
+        self.learning_rates = decay * tf.ones([self.unitsX, self.unitsY])
+        self.learning_rates = tf.math.maximum(10E-6 * tf.ones(
+                                            tf.shape(self.radius)), 
+                                            self.learning_rates)
 
     def decayLearningRate(self, bmu):
         """
@@ -151,6 +165,29 @@ class Network(tf.keras.Model):
         variance = (variance * 255).astype(np.uint8)
         cv2.imwrite(os.path.join(folder_path, str(index) + ".png"), image)
         cv2.imwrite(os.path.join(folder_path, str(index) + "_variance.png"), variance)
+    
+    def vanilla_weight_update(self, bmu, input_matrix, label, timeStep):
+        # create a distance modifier for neighbourhood function
+        distance_modifier = 1.0 / (2.0 * self.radius[bmu[0], bmu[1]] * self.radius[bmu[0], bmu[1]])
+
+        final_modifier = self.learning_rates * tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] * distance_modifier)
+
+        final_modifier = tf.repeat(final_modifier, repeats=self.shapeY // self.unitsY, axis=1)
+        final_modifier = tf.repeat(final_modifier, repeats=self.shapeX // self.unitsX, axis=0)
+        final_modifier = tf.reshape(final_modifier, [self.shapeX, self.shapeY])
+
+        # Perform weight update
+        self.som += final_modifier * (input_matrix - self.som)
+
+        # clip the values of SOM
+        self.som = tf.clip_by_value(self.som, 0.0, 1.0)
+
+        # increment the count for the label of input sample for the selected bmu
+        self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
+        
+        # decay parameters
+        self.vanillaDecayRadius(timeStep)
+        self.vanillaDecayLearningRate(timeStep)
 
     def weight_update(self, bmu, input_matrix, label):
         # create a distance modifier for neighbourhood function
@@ -199,7 +236,7 @@ class Network(tf.keras.Model):
         self.decayLearningRate(bmu)
 
     
-    def call(self, x, y):
+    def call(self, x, y, *args):
         """
         Forward pass through the network
 
@@ -208,9 +245,12 @@ class Network(tf.keras.Model):
         """
         tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
         bmu = self.layer2(unit_map)
-        self.weight_update(bmu, tiled_input, y)
+        if len(args) > 0:
+            self.vanilla_weight_update(bmu, tiled_input, y, args[0])
+        else:
+            self.weight_update(bmu, tiled_input, y)
     
-    def fit(self, train_samples, folder_path, index):
+    def fit(self, train_samples, folder_path, index, task_size, training_type, *args):
         """
         Train the model
 
@@ -220,16 +260,26 @@ class Network(tf.keras.Model):
         :type folder_path: str
         :param index: current task index
         :type index: int
+        :param task_size: number of classes in a task/domain
+        :type task_size: int
+        :param training_type: 'class' / 'domain'
+        :type training_type: str
         """
         tqdm.write("fitting model for task " + str(index))
         for cursor, sample in tqdm(enumerate(train_samples)):
+            label = util.getTrainingLabel(sample.getLabel(),
+                                          task_size,
+                                          training_type)
             # forward pass
-            self(sample.getImage(), sample.getLabel())
+            if len(args) > 0:
+                self(sample.getImage(), label, args[1]+cursor)
+            else:
+                self(sample.getImage(), label)
             
         # save the image of current state of SOM
-        # self.saveImage(folder_path, index)
-
-
+        print('folder path: ', folder_path)
+        self.saveImage(folder_path, index)
+    
     def getConfig(self):
         """
         Get configuration of this model for saving it
@@ -266,8 +316,12 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--variance', type=float, required=False, default=0.5, help='initial value of running variance')
     parser.add_argument('-fp', '--filepath', type=str, required=False, default=None, help='filepath for saving trained SOM model')
     parser.add_argument('-d', '--dataset', type=str, default=None, help='dataset type mnist/fashion/kmnist/cifar')
+    parser.add_argument('-nt', '--n_tasks', type=int, default=10, help='number of tasks in incremental training')
+    parser.add_argument('-ts', '--task_size', type=int, default=1, help='number of classes per task in incremental training')
+    parser.add_argument('-t', '--training_type', type=str, default='class', help='class incremental or domain incremental training')
     parser.add_argument('-tr', '--tau_radius', type=float, default=None, help='tau constant for decaying radius')
     parser.add_argument('-tlr', '--tau_lr', type=float, default=None, help='tau constant for decaying learning rate')
+    parser.add_argument('-us', '--unit_size', type=int, required=True, default=None, help='size of each patch of an image')
     args = parser.parse_args()
 
     # Set the GPU to be used
@@ -287,17 +341,39 @@ if __name__ == '__main__':
         os.makedirs(folder_path)
     print("folder_path: ", folder_path)
 
-    # Declare the object of the network
-    network = Network(28, args.units, 10, args.radius, args.learning_rate, 
-                    args.variance, args.variance_alpha, args.tau_radius, args.tau_lr)
+    # number of classes in complete training
+    n_classes = 0
+    if args.training_type == 'class':
+        n_classes = args.n_tasks * args.task_size
+    elif args.training_type == 'domain':
+        n_classes = args.task_size
 
+    # Declare the object of the network
+    network = Network(args.unit_size, args.units, n_classes, args.radius, 
+                      args.learning_rate, args.variance, args.variance_alpha, args.tau_radius, args.tau_lr)
+
+    timeStep = 0
     # Perform the forward pass
-    for index in range(5):
+    for index in range(args.n_tasks):
         # Load the data as per choice of training
-        class_train_samples = dataloader.loadClassIncremental("../data/" + args.dataset + "/train/", index, 2)
+        train_samples = None
+        if args.training_type == 'class':
+            train_samples = dataloader.loadClassIncremental(
+                os.path.join("../data", args.dataset, "train"), 
+                index, args.task_size)
+        elif args.training_type == 'domain':
+            train_samples = dataloader.loadDomainIncremental(
+                os.path.join("../data", args.dataset, "train"), 
+                index, args.task_size)
 
         # fit/train the model on train samples
-        network.fit(class_train_samples, folder_path, index)
+        network.fit(train_samples, 
+                    folder_path, 
+                    index, 
+                    args.task_size, 
+                    args.training_type,
+                    'vanilla', timeStep) # add ['vanilla', timeStep] only for vanilla SOM
+        timeStep += len(train_samples)
 
     # Destroy all cv2 windows
     # cv2.destroyAllWindows()
@@ -317,8 +393,7 @@ if __name__ == '__main__':
                      test_config['unitsY'], 
                      test_config['class_count'], 
                      10)
-    # test_model.setPredictedClass()
-    test_model.setPMILabel()
+    test_model.setPMI()
     print("model and class predictions loaded")
 
     test_samples = dataloader.loadNistTestData("../data/" + args.dataset)
@@ -328,9 +403,12 @@ if __name__ == '__main__':
     for sample in tqdm(test_samples): 
         feature_map = test_model.layer1(test_config['som'], sample.getImage())
         bmu = test_model.layer2(feature_map)
-        output = test_model.getPredictedClass(bmu)
+        output = tf.math.argmax(test_model.get_bmu_PMI(bmu))
+        label = util.getTrainingLabel(sample.getLabel(), 
+                                       args.task_size, 
+                                       args.training_type)
         predictions.append(output)
-        labels.append(sample.getLabel())
+        labels.append(label)
     predictions = tf.cast(tf.stack(predictions), dtype=tf.float32)
     labels = tf.cast(labels, dtype=tf.float32)
     

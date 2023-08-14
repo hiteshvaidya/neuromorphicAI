@@ -52,8 +52,8 @@ class testClass(tf.keras.Model):
         #self.som = tf.clip_by_value(self.som, 0.0, 1.0)
         self.som = som
 
-        # Initialize the matrix for predicted class
-        self.predicted_class = tf.ones([self.unitsX, self.unitsY]) * (-1.0)
+        # Initialize PMI(l; BMU)
+        self.pmi = None
         
         # class_count for every unit i.e. how many number of times a unit was selected as BMU for every class in the dataset
         # self.class_count = tf.zeros([self.unitsX, self.unitsY, n_classes])
@@ -63,35 +63,26 @@ class testClass(tf.keras.Model):
         self.layer1 = CosineDistanceLayer(self.shapeX // self.unitsX,
                                             self.unitsX)
         self.layer2 = MaxLayer(self.unitsX)
-        
-    def getPredictedClass(self, x):
-        # predictedClass = tf.gather(tf.gather(self.predicted_class, x[0]), x[1])
-        # return predictedClass
-        return self.predicted_class[x]
 
-    def setPredictedClass(self):      
-        # Update the predicted class for each unit
-        a = tf.reduce_sum(self.class_count, axis=-1)
-        indexes = tf.where(a == 0)
-        labels = tf.cast(tf.argmax(self.class_count, axis=-1), dtype=tf.float32)
-        values = -1.0 * tf.ones(indexes.shape[0])
-        self.predicted_class = tf.tensor_scatter_nd_update(labels, indexes, values)
-
-    def setPMILabel(self):
+    def setPMI(self):
         """
-        set predicted label of every unit using Point-wise Mutual Information provided in Dendritic SOM paper
+        set Point-wise Mutual Information provided in Dendritic SOM paper
+        equation (10)
+        NOTE: This function calculates PMI for all units at once
+        shape of pmi -> [unitsX, unitsY, n_classes]
         """
-        bmu_count = tf.reshape(self.class_count, [-1, self.class_count.shape[-1]])
+        bmu_count = tf.reshape(self.class_count, 
+                               [-1, self.class_count.shape[-1]])
         denom = tf.expand_dims(tf.reduce_sum(bmu_count, axis=1), axis=1)
-        conditional_probability = bmu_count / denom
+        conditional_probability = bmu_count / (denom + 1E-6) 
         prior = tf.reduce_sum(bmu_count, axis=0)
-        prior = prior / tf.reduce_sum(bmu_count)
+        prior = prior / (tf.reduce_sum(bmu_count) + 1E-6)
+        self.pmi = tf.math.log((conditional_probability / (prior + 1E-6)) + 1E-6)
+        self.pmi = tf.reshape(self.pmi, self.class_count.shape)
+        
 
-        predictions = conditional_probability / prior
-        predictions = tf.argmax(predictions, axis=1)
-        self.predicted_class = tf.reshape(predictions, [self.unitsX, self.unitsY])
     
-    def get_bmu_PMIs(self, bmu):
+    def get_bmu_PMI(self, bmu):
         """
         Accessor for the PMI of a unit
 
@@ -101,8 +92,8 @@ class testClass(tf.keras.Model):
         :rtype: tensor - [1, n_classes]
         """
         # Gather PMIs of only BMUs
-        predictions = tf.gather_nd(self.class_count, bmu)
-        return predictions
+        pmi = tf.gather_nd(self.pmi, bmu)
+        return pmi
 
     
 if __name__ == '__main__':
@@ -117,7 +108,7 @@ if __name__ == '__main__':
     class_count = som_model['class_count']
     
     test = testClass(som, shapeX, shapeY, unitsX, unitsY, class_count, 10)
-    test.setPredictedClass()
+
     # print(test.predicted_class)
     # print(test.class_count)
 
