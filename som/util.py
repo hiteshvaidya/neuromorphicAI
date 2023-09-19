@@ -211,16 +211,16 @@ def getAverageAccuracy(accuracies):
 
 def getLearningAccuracy(accuracies):
     value = tf.linalg.trace(accuracies) / tf.cast(tf.shape(accuracies)[0], dtype=tf.float32)
-    print('Learning accuracy: ', value)
     value = value.numpy()
     return value
 
 def getForgettingMeasure(accuracies):
     values = accuracies[-1, :] - tf.reduce_max(accuracies, axis=0)
-    forgettingMeasure = tf.reduce_sum(tf.abs(values))
+    forgettingMeasure = tf.reduce_sum(tf.abs(values)) / tf.cast(tf.shape(accuracies)[0], dtype=tf.float32)
+    forgettingMeasure = forgettingMeasure.numpy()
     return forgettingMeasure
 
-def dendSOMTaskAccuracy(networks, dataset, patch_size, 
+def dendSOMTaskAccuracy(networks, dataset, patch_size, stride, 
                         n_tasks, task_size, n_soms, training_type):
     # number of classes in complete training
     n_classes = 0
@@ -254,9 +254,9 @@ def dendSOMTaskAccuracy(networks, dataset, patch_size,
                                             n_tasks,
                                             task_size)    
 
-    final_accuracies = np.emprt([0, n_tasks], dtype=np.float32)
+    final_accuracies = np.zeros(n_tasks, dtype=np.float32)
     tqdm.write("measuring test accuracy")
-    for cursor, samples in (enumerate(test_samples)):
+    for cursor, samples in tqdm(enumerate(test_samples)):
         predictions = tf.Variable([], dtype=tf.int32)
 
         # collect labels of test_samples
@@ -266,7 +266,7 @@ def dendSOMTaskAccuracy(networks, dataset, patch_size,
                                         for sample in samples])
         
         # split every image into patches
-        test_samples = dataloader.breakImages(samples, patch_size)
+        test_samples = dataloader.breakImages(samples, patch_size, stride)
 
         for sample in test_samples:
             # PMI for BMU from every dendSOM
@@ -293,7 +293,7 @@ def dendSOMTaskAccuracy(networks, dataset, patch_size,
         labels = tf.cast(labels, dtype=tf.int32)
     
         task_accuracy = getTaskAccuracy(predictions, labels)
-        print('task accuracy: ', task_accuracy)
-        final_accuracies = np.append(final_accuracies, task_accuracy, axis=0)
+        # final_accuracies = np.append(final_accuracies, task_accuracy, axis=0)
+        final_accuracies[cursor] = task_accuracy.numpy()
 
     return final_accuracies
