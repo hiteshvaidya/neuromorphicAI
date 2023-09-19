@@ -62,6 +62,7 @@ if __name__ == '__main__':
     parser.add_argument('-ts', '--task_size', type=int, default=1, help='number of classes per task in incremental training')
     parser.add_argument('-t', '--training_type', type=str, default='class', help='class incremental or domain incremental training')
     parser.add_argument('-us', '--unit_size', type=int, required=True, default=None, help='size of each patch of an image')
+    parser.add_argument('-vanilla', '--vanillaSOM', type=bool, required=False, default=False, help='vanilla version of SOM or contSOM')
     args = parser.parse_args()
     
     # create 'logs' folder
@@ -115,13 +116,22 @@ if __name__ == '__main__':
                 os.path.join("../data", args.dataset, "train"), 
                 index, args.task_size)
         
+        
         # fit/train the model on train samples
-        network.fit(train_samples, 
-                    folder_path, 
-                    index, 
-                    args.task_size, 
-                    args.training_type) #, 'vanilla', timeStep)
-        timeStep += len(train_samples)
+        if args.vanillaSOM:
+            network.fit(train_samples, 
+                        folder_path, 
+                        index, 
+                        args.task_size, 
+                        args.training_type, 
+                        'vanilla', timeStep)
+            timeStep += len(train_samples)
+        else:
+            network.fit(train_samples, 
+                        folder_path, 
+                        index, 
+                        args.task_size, 
+                        args.training_type)
 
         test_config = network.getConfig()
         test_model = testClass(test_config['som'], 
