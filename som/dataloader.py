@@ -75,6 +75,7 @@ def loadClassIncremental(path, taskNumber, taskSize):
         task_samples = loadSplitData(path, t)
         samples = np.concatenate([samples, task_samples])
     np.random.shuffle(samples)
+    print(f'task {taskNumber} samples: {samples.shape}')
     return samples
 
 def writeAccuracy(path, accuracy):
@@ -110,10 +111,12 @@ def generateSamples(images, labels, shapeX, shapeY):
     samples = np.asarray(samples)
     return samples
 
-def convertToClassIncremental(nClasses, test_images, test_labels):
+def convertToClassIncremental(nTasks, taskSize, test_images, test_labels):
     test_samples = []
-    for c in range(nClasses):
-        indexes = np.where(test_labels == c)
+    for t in range(nTasks):
+        # indexes = np.where(test_labels == c)
+        indexes = np.where((test_labels >= t*taskSize) & 
+                           (test_labels < (t+1)*taskSize))
         samples = generateSamples(test_images[indexes],
                                   test_labels[indexes],
                                   test_images[indexes].shape[1],
@@ -128,7 +131,7 @@ def convertToTaskIncremental(nTasks, taskSize, test_images, test_labels):
         indexes = np.where((test_labels >= t*taskSize) & 
                            (test_labels < (t+1)*taskSize))
         samples = generateSamples(test_images[indexes],
-                                  test_labels[indexes],
+                                  test_labels[indexes] % taskSize,
                                   test_images[indexes].shape[1],
                                   test_images[indexes].shape[2])
         test_samples.append(samples)
@@ -154,7 +157,8 @@ def loadNistTestData(path, trainingType, nTasks, taskSize):
 
     samples = None
     if trainingType == 'class':
-        samples = convertToClassIncremental(nTasks*taskSize,
+        samples = convertToClassIncremental(nTasks,
+                                            taskSize,
                                             test_images,
                                             test_labels)
     else:
@@ -303,44 +307,45 @@ def dumpSplitData(images, labels, nClasses, path):
         pkl.dump(samples, open(os.path.join(path, str(c) + ".pkl"), 'wb'))
     
 
-def breakImages(samples, split_size):
+def breakImages(samples, patch_size, stride):
     """
     Split the dataset where each image is broken into patches
 
     :param samples: dataset
     :type samples: list of sample objects
-    :param split_size: size of patches
-    :type split_size: int
+    :param patch_size: size of patches
+    :type v: int
     :return: batch of patches of all input samples
     :rtype: tensor -> [n, number of patches, split_size, split_size, 1]
     """
     # add number of channels for grayscaled images
     # Shape: (batch_size, height, width, channels)
     images = tf.convert_to_tensor([sample.getImage() for sample in samples])
+    image_shape = images.shape[1:]
     labels = tf.convert_to_tensor([sample.getLabel() for sample in samples])
     images = tf.expand_dims(images, -1)
     
     # Define the parameters for patch extraction
-    patch_size = [1, split_size, split_size, 1]  # Size of each patch
-    strides = [1, split_size, split_size, 1]     # Strides for patch extraction
+    patch_sizes = [1, patch_size, patch_size, 1]  # Size of each patch
+    strides = [1, stride, stride, 1]     # Strides for patch extraction
     rates = [1, 1, 1, 1]       # Dilation rates
 
     # Extract patches from the input tensors
     patches = tf.image.extract_patches(images=images,
-                                    sizes=patch_size,
+                                    sizes=patch_sizes,
                                     strides=strides,
                                     rates=rates,
                                     padding='VALID')
-    
     # Reshape the patches to the desired shape
-    num_patches = patches.shape[1] * patches.shape[2]
-    patches = tf.reshape(patches, (-1, num_patches, split_size, split_size))
-
+    num_patches_height = (image_shape[0] - patch_size) // stride + 1
+    num_patches_width = (image_shape[1] - patch_size) // stride + 1
+    num_patches = num_patches_height * num_patches_width
+    patches = tf.reshape(patches, (-1, num_patches, patch_size, patch_size))
     samples = []
-    for index in range(patches.shape[0]):
+    for imageIndex in range(patches.shape[0]):
         row = []
-        for count in range(patches.shape[1]):
-            row.append(Sample(labels[index], patches.shape[2], patches.shape[-1], patches[index, count, :, :]))
+        for patchIndex in range(patches.shape[1]):
+            row.append(Sample(labels[imageIndex], patch_size, patch_size, patches[imageIndex, patchIndex, :, :]))
         samples.append(np.asarray(row))
     samples = np.asarray(samples)
     
