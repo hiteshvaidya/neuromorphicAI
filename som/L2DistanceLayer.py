@@ -1,15 +1,15 @@
 import tensorflow as tf
+from tensorflow.keras.layers import Layer
 import util
 
-class CosineDistanceLayer(tf.keras.layers.Layer):
+class L2DistanceLayer(Layer):
     """
     This is a custom layer for performing distance operation inspired from the convolutional layer in tensorflow
 
     :param tf: tensorflow object
     :type tf: layer object
     """
-
-    def __init__(self, kernel_size, tile_shape, **kwargs) -> None:
+    def __init__(self, kernel_size, tile_shape, **kwargs):
         """
         Constructor for the distance layer
 
@@ -20,8 +20,8 @@ class CosineDistanceLayer(tf.keras.layers.Layer):
         :type tile_shape: int
         """
         self.kernel_size = kernel_size
-        self.tile_shape = tile_shape        
-        super(CosineDistanceLayer, self).__init__(**kwargs)
+        self.tile_shape = tile_shape
+        super(L2DistanceLayer, self).__init__(**kwargs)
     
     def build(self, input_shapes):
         """
@@ -30,17 +30,16 @@ class CosineDistanceLayer(tf.keras.layers.Layer):
         :param input_shapes: input shape for the kernel
         :type input_shape: tuple
         """
-        # intialize the kernel
-        self.kernel = self.add_weight(name='kernel',
-                                    shape=[input_shapes[0], input_shapes[1]],
-                                    initializer='glorot_uniform',
-                                    trainable=False)
-        super(CosineDistanceLayer, self).build(input_shapes)
-        
+        self.kernel = self.add_weight(name='kernel', 
+                                      shape=[input_shapes[0], input_shapes[1]],
+                                      initializer='glorot_uniform',
+                                      trainable=False)
+        super(L2DistanceLayer, self).build(input_shapes)
+
     def call(self, som_matrix, input):
         """
-        This function calculates the distance between the SOM matrix and the input image using the cosine similarity.
-        We get an output matrix of the size of [number_of_units, number_of_units] where each index contains the cosine similarity value between the input image and the pixels of the corresponding unit.
+        This function calculates the distance between the SOM matrix and the input image using the L2 distance.
+        We get an output matrix of the size of [number_of_units, number_of_units] where each index contains the L2 distance value between the input image and the pixels of the corresponding unit.
 
         :param som_matrix: SOM matrix
         :type som_matrix: tensor of float values
@@ -68,9 +67,21 @@ class CosineDistanceLayer(tf.keras.layers.Layer):
         patches = tf.reshape(patches, [-1, self.kernel_size * self.kernel_size])
         
         input = tf.reshape(input, [1, -1])
-        patches = util.cosine_similarity(patches, input)
+        patches = util.l2_distance(patches, input)
 
         # reshape patches to [num_units_in_SOM, num_units_in_SOM]
         patches = tf.reshape(patches, [self.tile_shape, self.tile_shape])
-        
+
         return patches
+    
+    def compute_output_shape(self, input_shape):
+        return input_shape[0][:2] # Output shape is (batch_size, )
+    
+if __name__ == "__main__":
+    input1 = tf.keras.layers.Input(shape=(4, 4, 3))
+    input2 = tf.keras.layers.Input(shape=(4, 4, 3))
+
+    l2_distance_layer = L2DistanceLayer()([input1, input2])
+
+    model = tf.keras.models.Model(inputs=[input1, input2], outputs=l2_distance_layer)
+    

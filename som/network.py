@@ -54,7 +54,7 @@ class Network(tf.keras.Model):
         units = []
         for _ in range(self.unitsX * self.unitsY):
             current_time = time.time() - st
-            units.append(tf.random.normal([imgSize, imgSize], mean=0.4, stddev=0.3, seed=current_time))
+            units.append(tf.random.normal([imgSize, imgSize], mean=0.6, stddev=0.2, seed=current_time))
         print('units: ', len(units))
         # stack the units along rows and columns or reshape to form the SOM
         self.som = tf.concat([tf.concat(units_col, axis=1) for units_col in tf.split(units, self.unitsX)], axis=0)
@@ -71,6 +71,11 @@ class Network(tf.keras.Model):
         self.running_variance = tf.ones([self.shapeX, self.shapeY]) * running_variance
         # alpha value for updating running variance
         self.running_variance_alpha = running_variance_alpha
+
+        # create a buffer of som and running variance to save it offline
+        self.som_buffer = tf.expand_dims(self.som, 0)
+        # create a buffer of running variance to save it offline
+        self.running_variance_buffer = tf.expand_dims(self.running_variance, 0)
 
         # Calculate distances between units of the SOM
         self.cartesian_distances = util.calculate_distances(n_units, n_units)
@@ -212,8 +217,8 @@ class Network(tf.keras.Model):
 
         # clip the values of SOM
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
-
-        self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
+        
+        self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label[0]]], [self.class_count[bmu[0], bmu[1], label[0]] + 1])
 
         # we need some alpha value to update running variance 
         variance_alpha  = (self.running_variance_alpha - 0.5) + 1.0 / (1.0 + tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] / constant))
@@ -245,10 +250,11 @@ class Network(tf.keras.Model):
         """
         tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
         bmu = self.layer2(unit_map)
-        if len(args) > 0:
+        if len(args) > 1:
             self.vanilla_weight_update(bmu, tiled_input, y, args[0])
         else:
             self.weight_update(bmu, tiled_input, y)
+        
     
     def fit(self, train_samples, folder_path, index, task_size, training_type, *args):
         """
@@ -276,10 +282,24 @@ class Network(tf.keras.Model):
             else:
                 self(sample.getImage(), label)
             
+            # accumulate som and running_variance in their respective buffers
+            self.accumulate("som")
+            self.accumulate("variance")
+
+            # offload the buffers if they have 100 elements stored already
+            if self.som_buffer.shape[0] == 100:
+                self.saveBuffers(folder_path)
+            
         # save the image of current state of SOM
         print('folder path: ', folder_path)
         self.saveImage(folder_path, index)
     
+    def getModel(self):
+        return self.som
+
+    def getRunningVariance(self):
+        return self.running_variance
+
     def getConfig(self):
         """
         Get configuration of this model for saving it
@@ -301,6 +321,21 @@ class Network(tf.keras.Model):
         config['tau_lr'] = self.tau_lr
 
         return config
+    
+    def accumulate(self, choice):
+        if choice == "som":
+            self.som_buffer = tf.concat([self.som_buffer, tf.expand_dims(self.som, 0)], -1)
+        elif choice == 'variance':
+            self.running_variance_buffer = tf.concat([self.running_variance_buffer, tf.expand_dims(self.running_variance, 0)], -1)
+    
+    def saveBuffers(self, folderpath):
+        dataloader.saveBuffer(self.som_buffer, 
+                                os.path.join(folderpath, "som_buffer.pkl"))
+        dataloader.saveBuffer(self.running_variance_buffer, 
+                                os.path.join(folderpath, "running_variance_buffer.pkl"))
+        self.som_buffer = tf.expand_dims(self.som, 0)
+        self.running_variance_buffer = tf.expand_dims(self.running_variance, 0)
+
 
 if __name__ == '__main__':
 

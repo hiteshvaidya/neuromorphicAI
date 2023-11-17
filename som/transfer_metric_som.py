@@ -87,34 +87,55 @@ if __name__ == '__main__':
                                              args.variance_alpha, 
                                              args.tau_radius, args.tau_lr)
     
+    test_samples = []
     # load test samples
-    test_samples = dataloader.loadNistTestData("../data/" + args.dataset, 
+    if "nist" in args.dataset:
+        test_samples = dataloader.loadNistTestData("../data/" + args.dataset, 
                                                args.training_type, 
                                                args.n_tasks, 
                                                args.task_size)
+    elif "cifar" in args.dataset:
+        for taskNumber in range(args.n_tasks):
+            if args.training_type == "class":
+                class_samples = dataloader.loadClassIncremental(os.path.join("../data", args.dataset, "test", "green_channel_samples"), taskNumber, args.task_size)
+            elif args.training_type == "domain":
+                class_samples = dataloader.loadDomainIncremental(os.path.join("../data", args.dataset, "test", "green_channel_samples"), taskNumber, args.task_size)
+            test_samples.append(class_samples)
+        test_samples = np.asarray(test_samples)
+
     
     final_accuracies = tf.constant([], dtype=tf.float32, 
                                    shape=(0, args.n_tasks))
+
+    distance_type = 'cosine'
+    # if 'cifar-10' in args.dataset:
+    #     distance_type = 'l2'
+    # else:
+    #     distance_type = 'cosine'
 
     b = util.getRandomAccuracy(network, 
                                test_samples, 
                                args.n_tasks,
                                args.task_size, 
-                               args.training_type)
+                               args.training_type,
+                               distance_type)
     
     timeStep = 0
     # Perform the forward pass
     for index in range(args.n_tasks):
         # Load the data as per choice of training
         train_samples = None
+        path = ""
+        if "cifar-10" in args.dataset:
+            path = os.path.join("../data", args.dataset, "train", "green_channel_samples")
+        else:
+            path = os.path.join("../data", args.dataset, "train")
         if args.training_type == 'class':
             train_samples = dataloader.loadClassIncremental(
-                os.path.join("../data", args.dataset, "train"), 
-                index, args.task_size)
+                path, index, args.task_size)
         elif args.training_type == 'domain':
             train_samples = dataloader.loadDomainIncremental(
-                os.path.join("../data", args.dataset, "train"), 
-                index, args.task_size)
+                path, index, args.task_size)
         
         
         # fit/train the model on train samples
@@ -134,13 +155,14 @@ if __name__ == '__main__':
                         args.training_type)
 
         test_config = network.getConfig()
+        
         test_model = testClass(test_config['som'], 
                     test_config['shapeX'], 
                     test_config['shapeY'], 
                     test_config['unitsX'], 
                     test_config['unitsY'], 
                     test_config['class_count'], 
-                    n_classes)
+                    n_classes, distance_type)
         test_model.setPMI()
         
         prediction_count = tf.zeros(args.n_tasks, dtype=tf.int32)
@@ -171,7 +193,6 @@ if __name__ == '__main__':
     config = network.getConfig()
     pkl.dump(config, 
                 open(os.path.join(folder_path, 'model_config.pkl'), 'wb'))
-    del network
     
     fwt = util.getFWT(final_accuracies, b)
     bwt = util.getBWT(final_accuracies)
@@ -185,6 +206,8 @@ if __name__ == '__main__':
     print('average accuracy: ', avgAccuracy)
     print('learning accuracy: ', learningAccuracy)
     print('forgetting measure: ', forgettingMeasure)
+    print('size of model: ', util.getMemory(network.getModel()), 'B')
+    print('size of running variance matrix: ', util.getMemory(network.getRunningVariance()), 'B')
 
     output_path = os.path.join(folder_path, 'transfer_metrics.csv')
 
@@ -198,6 +221,9 @@ if __name__ == '__main__':
         fp.write('bwt = ' + str(bwt) + '\n')
         fp.write('average accuracy = ' + str(avgAccuracy) + '\n')
         fp.write('learning accuracy = ' + str(learningAccuracy) + '\n')
-        fp.write('forgetting measure: ' + str(forgettingMeasure))
+        fp.write('forgetting measure: ' + str(forgettingMeasure) + '\n')
+        fp.write('memory of model = ' + str(util.getMemory(network.getModel())) + 'bytes\n')
+        fp.write('memory of running variance matrix = ' + str(util.getMemory(network.getRunningVariance())) + 'bytes\n')
 
+    del network
     

@@ -174,7 +174,6 @@ def loadNistTestData(path, trainingType, nTasks, taskSize):
 
     return samples
 
-
 def loadNistTrainData(path):
     """
     For either of MNIST, FashionMNIST, KMNIST:
@@ -392,6 +391,7 @@ def dump_cifar_channels(split, class_number, y_labels,
     pkl.dump(np.asarray(g_samples), open(os.path.join('../data/cifar-10/', split, 'green_channel_samples', str(class_number) + '.pkl'), 'wb'))
     pkl.dump(np.asarray(b_samples), open(os.path.join('../data/cifar-10/', split, 'blue_channel_samples', str(class_number) + '.pkl'), 'wb'))
 
+
 def saveCifarImages():
     """
     Load cifar-10 images and save them class wise in the form of
@@ -450,4 +450,21 @@ def splitCifarChannels():
     for class_number in tqdm(range(10)):
         dump_cifar_channels('test', class_number, y_test,
                             red_channel, green_channel, blue_channel)
-        
+
+
+def saveBuffer(buffer_data, filename):
+    """
+    keeps pushing the SOM to a file like a buffer
+
+    :param som: SOM
+    :type som: matrix
+    :param filename: filename
+    :type filename: string
+    """
+    if not os.path.exists(filename):
+        pkl.dump(buffer_data, open(filename, "wb"))
+    else:
+        buffer_data = buffer_data[1:]
+        buffer = pkl.load(open(filename, 'rb'))
+        buffer = tf.concat([buffer, buffer_data], 0)
+        pkl.dump(buffer, open(filename, 'wb'))

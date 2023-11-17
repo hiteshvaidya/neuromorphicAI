@@ -9,6 +9,7 @@ from testSOM import testClass
 import dataloader
 from tqdm import tqdm
 import os
+import sys
 # from network import Network
 
 
@@ -71,6 +72,21 @@ def cosine_similarity(tensor1, tensor2):
     # calculate dot product of two tensors
     dot_product = tf.reduce_sum(tf.multiply(normalized_matrix1, normalized_matrix2), axis=1)
     return dot_product
+
+def l2_distance(tensor1, tensor2):
+    """
+    calculate row-wise l2 distance between two tensors
+
+    :param tensor1: first tensor
+    :type tensor1: tf.float32
+    :param tensor2: second tensor
+    :type tensor2: tf.float32
+    :return: cosine similarity value
+    :rtype: tf.float32
+    """
+    squared_diff = tf.square(tensor1 - tensor2)
+    l2_distance = tf.sqrt(tf.reduce_sum(squared_diff, axis=-1))
+    return l2_distance
 
 def variance_distance(sample, som_unit_values, som_unit_variances):
     """
@@ -147,7 +163,7 @@ def getTaskAccuracy(predictions, labels):
 
     return accuracy
 
-def getRandomAccuracy(network, test_samples, n_tasks, task_size, training_type):
+def getRandomAccuracy(network, test_samples, n_tasks, task_size, training_type, distance_type):
     # number of classes in complete training
     n_classes = 0
     if training_type == 'class':
@@ -162,7 +178,7 @@ def getRandomAccuracy(network, test_samples, n_tasks, task_size, training_type):
                     test_config['unitsX'], 
                     test_config['unitsY'], 
                     test_config['class_count'], 
-                    n_classes)
+                    n_classes, distance_type)
     test_model.setPMI()
     total_tested_labels = np.zeros(n_classes, dtype=np.float32)
     b = np.zeros(n_tasks, dtype=np.float32)
@@ -297,3 +313,6 @@ def dendSOMTaskAccuracy(networks, dataset, patch_size, stride,
         final_accuracies[cursor] = task_accuracy.numpy()
 
     return final_accuracies
+
+def getMemory(data):
+    return sys.getsizeof(data)

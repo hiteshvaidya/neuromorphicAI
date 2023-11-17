@@ -12,7 +12,9 @@ author: Manali Dangarikar
 import tensorflow as tf
 import os
 from CosineDistanceLayer import CosineDistanceLayer
+from L2DistanceLayer import L2DistanceLayer
 from MaxLayer import MaxLayer
+from MinLayer import MinLayer
 import dataloader
 # from cnn2snn import check_model_compatibility
 import pickle
@@ -26,7 +28,7 @@ class testClass(tf.keras.Model):
     :param tf: tensorflow
     :type tf: tensorflow layer object
     """
-    def __init__(self, som, shapeX, shapeY, unitsX, unitsY, class_count, n_classes):
+    def __init__(self, som, shapeX, shapeY, unitsX, unitsY, class_count, n_classes, distance_type=None):
         """
         constructor
 
@@ -59,10 +61,22 @@ class testClass(tf.keras.Model):
         # self.class_count = tf.zeros([self.unitsX, self.unitsY, n_classes])
         self.class_count = class_count
 
+        self.layer1 = None
+        self.layer2 = None
+
         # Declare the layers of the network
-        self.layer1 = CosineDistanceLayer(self.shapeX // self.unitsX,
+        if distance_type == 'cosine':
+            self.layer1 = CosineDistanceLayer(self.shapeX // self.unitsX,
                                             self.unitsX)
-        self.layer2 = MaxLayer(self.unitsX)
+            self.layer2 = MaxLayer(self.unitsX)
+        elif distance_type == 'l2':
+            self.layer1 = L2DistanceLayer(self.shapeX // self.unitsX,
+                                            self.unitsX)
+            self.layer2 = MinLayer(self.unitsX)
+        else:
+            self.layer1 = CosineDistanceLayer(self.shapeX // self.unitsX,
+                                            self.unitsX)
+            self.layer2 = MaxLayer(self.unitsX)
 
     def setPMI(self):
         """

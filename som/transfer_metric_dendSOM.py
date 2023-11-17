@@ -323,7 +323,6 @@ if __name__ == '__main__':
    
         # fit/train the model on train samples
         for sample in train_samples:
-            print('sample: ', sample.shape)
             for count in range(n_soms):
                 networks[count].fit(sample[count], 
                                     folder_path, 
@@ -366,6 +365,10 @@ if __name__ == '__main__':
     print('average accuracy: ', avgAccuracy)
     print('learning accuracy: ', learningAccuracy)
     print('forgetting measure: ', forgettingMeasure)
+    model_memory = 0
+    for count in range(n_soms):
+        model_memory += util.getMemory(networks[count].getModel())
+    print('size of model: ', model_memory, 'B')
         
     output_path = os.path.join(folder_path, 'transfer_metrics.csv')
     
@@ -378,7 +381,9 @@ if __name__ == '__main__':
         fp.write('bwt = ' + str(bwt) + '\n')
         fp.write('average accuracy = ' + str(avgAccuracy) + '\n')
         fp.write('learning accuracy = ' + str(learningAccuracy) + '\n')
-        fp.write('forgetting measure: ' + str(forgettingMeasure))
+        fp.write('forgetting measure: ' + str(forgettingMeasure) + '\n')
+        fp.write('model memory = ' + str(model_memory))
+
 
     end = datetime.now()
     
