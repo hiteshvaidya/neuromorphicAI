@@ -461,10 +461,5 @@ def saveBuffer(buffer_data, filename):
     :param filename: filename
     :type filename: string
     """
-    if not os.path.exists(filename):
-        pkl.dump(buffer_data, open(filename, "wb"))
-    else:
-        buffer_data = buffer_data[1:]
-        buffer = pkl.load(open(filename, 'rb'))
-        buffer = tf.concat([buffer, buffer_data], 0)
-        pkl.dump(buffer, open(filename, 'wb'))
+    buffer_data = buffer_data[1:]
+    pkl.dump(buffer_data, open(filename, 'wb'))

@@ -170,7 +170,7 @@ if __name__ == '__main__':
 
         for task_index, samples in enumerate(test_samples):
             for sample in samples:
-                feature_map = test_model.layer1(network.som, 
+                feature_map = test_model.layer1(test_model.som, 
                                             sample.getImage())
                 bmu = test_model.layer2(feature_map)
                 output = tf.math.argmax(test_model.get_bmu_PMI(bmu))
