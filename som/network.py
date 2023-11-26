@@ -218,7 +218,7 @@ class Network(tf.keras.Model):
         # clip the values of SOM
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
         
-        self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label[0]]], [self.class_count[bmu[0], bmu[1], label[0]] + 1])
+        self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
 
         # we need some alpha value to update running variance 
         variance_alpha  = (self.running_variance_alpha - 0.5) + 1.0 / (1.0 + tf.math.exp(-self.cartesian_distances[:, :, bmu[0], bmu[1]] / constant))
@@ -284,18 +284,18 @@ class Network(tf.keras.Model):
                 self(sample.getImage(), label)
             
             # accumulate som and running_variance in their respective buffers
-            self.accumulate("som")
-            self.accumulate("variance")
+            # self.accumulate("som")
+            # self.accumulate("variance")
             
             # offload the buffers if they have 100 elements stored already
-            if self.som_buffer.shape[0] == 50:
-                if not os.path.exists(os.path.join(folder_path, "buffer")):
-                    os.mkdir(os.path.join(folder_path, "buffer"))
-                self.saveBuffers(os.path.join(folder_path, "buffer"), counter)
-                counter += 1
+        #     if self.som_buffer.shape[0] == 50:
+        #         if not os.path.exists(os.path.join(folder_path, "buffer")):
+        #             os.mkdir(os.path.join(folder_path, "buffer"))
+        #         self.saveBuffers(os.path.join(folder_path, "buffer"), counter)
+        #         counter += 1
         
-        if self.som_buffer.shape[0] > 1:
-            self.saveBuffers(os.path.join(folder_path, "buffer"), counter)
+        # if self.som_buffer.shape[0] > 1:
+        #     self.saveBuffers(os.path.join(folder_path, "buffer"), counter)
             
         # save the image of current state of SOM
         self.saveImage(folder_path, index)

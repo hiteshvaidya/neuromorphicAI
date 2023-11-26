@@ -108,7 +108,7 @@ def generateSamples(images, labels, shapeX, shapeY):
     samples = []
     for image, label in zip(images, labels):
         samples.append(Sample(label, shapeX, shapeY, image))
-    samples = np.asarray(samples)
+    samples = np.asarray(samples, dtype=object)
     return samples
 
 def convertToClassIncremental(nTasks, taskSize, test_images, test_labels):
@@ -122,7 +122,7 @@ def convertToClassIncremental(nTasks, taskSize, test_images, test_labels):
                                   test_images[indexes].shape[1],
                                   test_images[indexes].shape[2])
         test_samples.append(samples)
-    test_samples = np.asarray(test_samples)
+    test_samples = np.asarray(test_samples, dtype=object)
     return test_samples
 
 def convertToTaskIncremental(nTasks, taskSize, test_images, test_labels):
@@ -135,7 +135,7 @@ def convertToTaskIncremental(nTasks, taskSize, test_images, test_labels):
                                   test_images[indexes].shape[1],
                                   test_images[indexes].shape[2])
         test_samples.append(samples)
-    test_samples = np.asarray(test_samples)
+    test_samples = np.asarray(test_samples, dtype=object)
     return test_samples
 
 def loadNistTestData(path, trainingType, nTasks, taskSize):
@@ -401,6 +401,8 @@ def saveCifarImages():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_train = x_train.astype('float32') / 255.0 
     x_test = x_test.astype('float32') / 255.0 
+    y_train = np.squeeze(y_train)
+    y_test = np.squeeze(y_test)
 
     if not os.path.isdir(os.path.join('../data/cifar-10/train/colored')):
         os.makedirs(os.path.join('../data/cifar-10/train/colored'))
@@ -410,13 +412,13 @@ def saveCifarImages():
         indices = np.where(y_train == c)[0]
         samples = []
         for index in indices:
-            samples.append(Sample(y_train[index][0].astype(np.int32), 32, 32, x_train[index]))
+            samples.append(Sample(y_train[index].astype(np.int32), 32, 32, x_train[index]))
         pkl.dump(np.asarray(samples), open(os.path.join("../data/cifar-10/train/colored/", str(c)+'.pkl'), 'wb'))
 
         indices = np.where(y_test == c)[0]
         samples = []
         for index in indices:
-            samples.append(Sample(y_test[index][0].astype(np.int32), 
+            samples.append(Sample(y_test[index].astype(np.int32), 
                                   32, 32, x_test[index]))
         pkl.dump(np.asarray(samples), open(os.path.join("../data/cifar-10/test/colored/", str(c)+'.pkl'), 'wb'))
         
@@ -429,6 +431,8 @@ def splitCifarChannels():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_train = x_train.astype('float32') / 255.0 
     x_test = x_test.astype('float32') / 255.0 
+    y_train = np.squeeze(y_train)
+    y_test = np.squeeze(y_test)
     
     # Split the images into Red, Green and Blue channels
     red_channel = x_train[..., 0] 
