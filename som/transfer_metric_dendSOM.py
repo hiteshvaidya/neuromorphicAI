@@ -19,6 +19,7 @@ import util
 import cv2
 import math
 import time
+import csv
 import numpy as np
 import argparse
 from testSOM import testClass
@@ -384,6 +385,10 @@ if __name__ == '__main__':
         fp.write('forgetting measure: ' + str(forgettingMeasure) + '\n')
         fp.write('model memory = ' + str(model_memory))
 
+    with open(os.path.join(folder_path, 'metrics.csv'), 'w') as file:
+        writer = csv.writer(file)
+        writer.writerow(["b", "fwt", "bwt", "AA", "LA", "FM", "mem"])
+        writer.writerow([b, fwt, bwt, avgAccuracy, learningAccuracy, forgettingMeasure, util.getMemory(network.getModel())])
 
     end = datetime.now()
     
