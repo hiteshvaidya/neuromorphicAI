@@ -7,6 +7,7 @@ import util
 from testSOM import testClass
 import numpy as np
 import pickle as pkl
+import csv
 
 def create_class_incremental_model(unit_size, units, n_classes, radius, learning_rate, variance, variance_alpha, tau_radius, tau_lr):
     """
@@ -89,7 +90,7 @@ if __name__ == '__main__':
     
     test_samples = []
     # load test samples
-    if "nist" in args.dataset:
+    if "nist" in args.dataset or "fashion" in args.dataset:
         test_samples = dataloader.loadNistTestData("../data/" + args.dataset, 
                                                args.training_type, 
                                                args.n_tasks, 
@@ -119,6 +120,7 @@ if __name__ == '__main__':
                                args.task_size, 
                                args.training_type,
                                distance_type)
+    print("b: ", b)
     
     timeStep = 0
     # Perform the forward pass
@@ -153,6 +155,7 @@ if __name__ == '__main__':
                         index, 
                         args.task_size, 
                         args.training_type)
+        print(f"Training finished for task {index}")
 
         test_config = network.getConfig()
         
@@ -177,6 +180,7 @@ if __name__ == '__main__':
                 label = util.getTrainingLabel(sample.getLabel(),
                                             args.task_size,
                                             args.training_type)
+                
                 if tf.equal(output, label):
                     prediction_count = tf.tensor_scatter_nd_add(prediction_count, [[task_index]], [1])
                 label_count = tf.tensor_scatter_nd_add(label_count, [[task_index]], [1])
@@ -224,6 +228,11 @@ if __name__ == '__main__':
         fp.write('forgetting measure: ' + str(forgettingMeasure) + '\n')
         fp.write('memory of model = ' + str(util.getMemory(network.getModel())) + 'bytes\n')
         fp.write('memory of running variance matrix = ' + str(util.getMemory(network.getRunningVariance())) + 'bytes\n')
+    
+    with open(os.path.join(folder_path, 'metrics.csv'), 'w') as file:
+        writer = csv.writer(file)
+        writer.writerow(["b", "fwt", "bwt", "AA", "LA", "FM", "mem"])
+        writer.writerow([b, fwt, bwt, avgAccuracy, learningAccuracy, forgettingMeasure, util.getMemory(network.getModel())])
 
     del network
     
