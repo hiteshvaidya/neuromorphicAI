@@ -117,6 +117,7 @@ def convertToClassIncremental(nTasks, taskSize, test_images, test_labels):
         # indexes = np.where(test_labels == c)
         indexes = np.where((test_labels >= t*taskSize) & 
                            (test_labels < (t+1)*taskSize))
+        
         samples = generateSamples(test_images[indexes],
                                   test_labels[indexes],
                                   test_images[indexes].shape[1],
