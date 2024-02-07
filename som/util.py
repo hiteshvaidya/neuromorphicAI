@@ -9,6 +9,7 @@ from testSOM import testClass
 import dataloader
 from tqdm import tqdm
 import os
+import sys
 # from network import Network
 
 
@@ -71,6 +72,21 @@ def cosine_similarity(tensor1, tensor2):
     # calculate dot product of two tensors
     dot_product = tf.reduce_sum(tf.multiply(normalized_matrix1, normalized_matrix2), axis=1)
     return dot_product
+
+def l2_distance(tensor1, tensor2):
+    """
+    calculate row-wise l2 distance between two tensors
+
+    :param tensor1: first tensor
+    :type tensor1: tf.float32
+    :param tensor2: second tensor
+    :type tensor2: tf.float32
+    :return: cosine similarity value
+    :rtype: tf.float32
+    """
+    squared_diff = tf.square(tensor1 - tensor2)
+    l2_distance = tf.sqrt(tf.reduce_sum(squared_diff, axis=-1))
+    return l2_distance
 
 def variance_distance(sample, som_unit_values, som_unit_variances):
     """
@@ -147,7 +163,7 @@ def getTaskAccuracy(predictions, labels):
 
     return accuracy
 
-def getRandomAccuracy(network, test_samples, n_tasks, task_size, training_type):
+def getRandomAccuracy(network, test_samples, n_tasks, task_size, training_type, distance_type):
     # number of classes in complete training
     n_classes = 0
     if training_type == 'class':
@@ -162,7 +178,7 @@ def getRandomAccuracy(network, test_samples, n_tasks, task_size, training_type):
                     test_config['unitsX'], 
                     test_config['unitsY'], 
                     test_config['class_count'], 
-                    n_classes)
+                    n_classes, distance_type)
     test_model.setPMI()
     total_tested_labels = np.zeros(n_classes, dtype=np.float32)
     b = np.zeros(n_tasks, dtype=np.float32)
@@ -211,16 +227,16 @@ def getAverageAccuracy(accuracies):
 
 def getLearningAccuracy(accuracies):
     value = tf.linalg.trace(accuracies) / tf.cast(tf.shape(accuracies)[0], dtype=tf.float32)
-    print('Learning accuracy: ', value)
     value = value.numpy()
     return value
 
 def getForgettingMeasure(accuracies):
     values = accuracies[-1, :] - tf.reduce_max(accuracies, axis=0)
-    forgettingMeasure = tf.reduce_sum(tf.abs(values))
+    forgettingMeasure = tf.reduce_sum(tf.abs(values)) / tf.cast(tf.shape(accuracies)[0], dtype=tf.float32)
+    forgettingMeasure = forgettingMeasure.numpy()
     return forgettingMeasure
 
-def dendSOMTaskAccuracy(networks, dataset, patch_size, 
+def dendSOMTaskAccuracy(networks, dataset, patch_size, stride, 
                         n_tasks, task_size, n_soms, training_type):
     # number of classes in complete training
     n_classes = 0
@@ -254,9 +270,9 @@ def dendSOMTaskAccuracy(networks, dataset, patch_size,
                                             n_tasks,
                                             task_size)    
 
-    final_accuracies = np.emprt([0, n_tasks], dtype=np.float32)
+    final_accuracies = np.zeros(n_tasks, dtype=np.float32)
     tqdm.write("measuring test accuracy")
-    for cursor, samples in (enumerate(test_samples)):
+    for cursor, samples in tqdm(enumerate(test_samples)):
         predictions = tf.Variable([], dtype=tf.int32)
 
         # collect labels of test_samples
@@ -266,7 +282,7 @@ def dendSOMTaskAccuracy(networks, dataset, patch_size,
                                         for sample in samples])
         
         # split every image into patches
-        test_samples = dataloader.breakImages(samples, patch_size)
+        test_samples = dataloader.breakImages(samples, patch_size, stride)
 
         for sample in test_samples:
             # PMI for BMU from every dendSOM
@@ -293,7 +309,10 @@ def dendSOMTaskAccuracy(networks, dataset, patch_size,
         labels = tf.cast(labels, dtype=tf.int32)
     
         task_accuracy = getTaskAccuracy(predictions, labels)
-        print('task accuracy: ', task_accuracy)
-        final_accuracies = np.append(final_accuracies, task_accuracy, axis=0)
+        # final_accuracies = np.append(final_accuracies, task_accuracy, axis=0)
+        final_accuracies[cursor] = task_accuracy.numpy()
 
     return final_accuracies
+
+def getMemory(data):
+    return sys.getsizeof(data)

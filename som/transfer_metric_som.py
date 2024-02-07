@@ -7,6 +7,7 @@ import util
 from testSOM import testClass
 import numpy as np
 import pickle as pkl
+import csv
 
 def create_class_incremental_model(unit_size, units, n_classes, radius, learning_rate, variance, variance_alpha, tau_radius, tau_lr):
     """
@@ -62,6 +63,7 @@ if __name__ == '__main__':
     parser.add_argument('-ts', '--task_size', type=int, default=1, help='number of classes per task in incremental training')
     parser.add_argument('-t', '--training_type', type=str, default='class', help='class incremental or domain incremental training')
     parser.add_argument('-us', '--unit_size', type=int, required=True, default=None, help='size of each patch of an image')
+    parser.add_argument('-vanilla', '--vanillaSOM', type=bool, required=False, default=False, help='vanilla version of SOM or contSOM')
     args = parser.parse_args()
     
     # create 'logs' folder
@@ -86,51 +88,84 @@ if __name__ == '__main__':
                                              args.variance_alpha, 
                                              args.tau_radius, args.tau_lr)
     
+    test_samples = []
     # load test samples
-    test_samples = dataloader.loadNistTestData("../data/" + args.dataset, 
+    if "nist" in args.dataset or "fashion" in args.dataset:
+        test_samples = dataloader.loadNistTestData("../data/" + args.dataset, 
                                                args.training_type, 
                                                args.n_tasks, 
                                                args.task_size)
+    elif "cifar" in args.dataset:
+        for taskNumber in range(args.n_tasks):
+            if args.training_type == "class":
+                class_samples = dataloader.loadClassIncremental(os.path.join("../data", args.dataset, "test", "green_channel_samples"), taskNumber, args.task_size)
+            elif args.training_type == "domain":
+                class_samples = dataloader.loadDomainIncremental(os.path.join("../data", args.dataset, "test", "green_channel_samples"), taskNumber, args.task_size)
+            test_samples.append(class_samples)
+        test_samples = np.asarray(test_samples)
+
     
     final_accuracies = tf.constant([], dtype=tf.float32, 
                                    shape=(0, args.n_tasks))
+
+    distance_type = 'cosine'
+    # if 'cifar-10' in args.dataset:
+    #     distance_type = 'l2'
+    # else:
+    #     distance_type = 'cosine'
 
     b = util.getRandomAccuracy(network, 
                                test_samples, 
                                args.n_tasks,
                                args.task_size, 
-                               args.training_type)
+                               args.training_type,
+                               distance_type)
+    print("b: ", b)
     
     timeStep = 0
     # Perform the forward pass
     for index in range(args.n_tasks):
         # Load the data as per choice of training
         train_samples = None
+        path = ""
+        if "cifar-10" in args.dataset:
+            path = os.path.join("../data", args.dataset, "train", "green_channel_samples")
+        else:
+            path = os.path.join("../data", args.dataset, "train")
         if args.training_type == 'class':
             train_samples = dataloader.loadClassIncremental(
-                os.path.join("../data", args.dataset, "train"), 
-                index, args.task_size)
+                path, index, args.task_size)
         elif args.training_type == 'domain':
             train_samples = dataloader.loadDomainIncremental(
-                os.path.join("../data", args.dataset, "train"), 
-                index, args.task_size)
+                path, index, args.task_size)
+        
         
         # fit/train the model on train samples
-        network.fit(train_samples, 
-                    folder_path, 
-                    index, 
-                    args.task_size, 
-                    args.training_type) #, 'vanilla', timeStep)
-        timeStep += len(train_samples)
+        if args.vanillaSOM:
+            network.fit(train_samples, 
+                        folder_path, 
+                        index, 
+                        args.task_size, 
+                        args.training_type, 
+                        'vanilla', timeStep)
+            timeStep += len(train_samples)
+        else:
+            network.fit(train_samples, 
+                        folder_path, 
+                        index, 
+                        args.task_size, 
+                        args.training_type)
+        print(f"Training finished for task {index}")
 
         test_config = network.getConfig()
+        
         test_model = testClass(test_config['som'], 
                     test_config['shapeX'], 
                     test_config['shapeY'], 
                     test_config['unitsX'], 
                     test_config['unitsY'], 
                     test_config['class_count'], 
-                    n_classes)
+                    n_classes, distance_type)
         test_model.setPMI()
         
         prediction_count = tf.zeros(args.n_tasks, dtype=tf.int32)
@@ -138,13 +173,14 @@ if __name__ == '__main__':
 
         for task_index, samples in enumerate(test_samples):
             for sample in samples:
-                feature_map = test_model.layer1(network.som, 
+                feature_map = test_model.layer1(test_model.som, 
                                             sample.getImage())
                 bmu = test_model.layer2(feature_map)
                 output = tf.math.argmax(test_model.get_bmu_PMI(bmu))
                 label = util.getTrainingLabel(sample.getLabel(),
                                             args.task_size,
                                             args.training_type)
+                
                 if tf.equal(output, label):
                     prediction_count = tf.tensor_scatter_nd_add(prediction_count, [[task_index]], [1])
                 label_count = tf.tensor_scatter_nd_add(label_count, [[task_index]], [1])
@@ -161,7 +197,6 @@ if __name__ == '__main__':
     config = network.getConfig()
     pkl.dump(config, 
                 open(os.path.join(folder_path, 'model_config.pkl'), 'wb'))
-    del network
     
     fwt = util.getFWT(final_accuracies, b)
     bwt = util.getBWT(final_accuracies)
@@ -175,6 +210,8 @@ if __name__ == '__main__':
     print('average accuracy: ', avgAccuracy)
     print('learning accuracy: ', learningAccuracy)
     print('forgetting measure: ', forgettingMeasure)
+    print('size of model: ', util.getMemory(network.getModel()), 'B')
+    print('size of running variance matrix: ', util.getMemory(network.getRunningVariance()), 'B')
 
     output_path = os.path.join(folder_path, 'transfer_metrics.csv')
 
@@ -188,6 +225,14 @@ if __name__ == '__main__':
         fp.write('bwt = ' + str(bwt) + '\n')
         fp.write('average accuracy = ' + str(avgAccuracy) + '\n')
         fp.write('learning accuracy = ' + str(learningAccuracy) + '\n')
-        fp.write('forgetting measure: ' + str(forgettingMeasure))
+        fp.write('forgetting measure: ' + str(forgettingMeasure) + '\n')
+        fp.write('memory of model = ' + str(util.getMemory(network.getModel())) + 'bytes\n')
+        fp.write('memory of running variance matrix = ' + str(util.getMemory(network.getRunningVariance())) + 'bytes\n')
+    
+    with open(os.path.join(folder_path, 'metrics.csv'), 'w') as file:
+        writer = csv.writer(file)
+        writer.writerow(["b", "fwt", "bwt", "AA", "LA", "FM", "mem"])
+        writer.writerow([b, fwt, bwt, avgAccuracy, learningAccuracy, forgettingMeasure, util.getMemory(network.getModel())])
 
+    del network
     

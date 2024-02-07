@@ -75,6 +75,7 @@ def loadClassIncremental(path, taskNumber, taskSize):
         task_samples = loadSplitData(path, t)
         samples = np.concatenate([samples, task_samples])
     np.random.shuffle(samples)
+    print(f'task {taskNumber} samples: {samples.shape}')
     return samples
 
 def writeAccuracy(path, accuracy):
@@ -107,19 +108,22 @@ def generateSamples(images, labels, shapeX, shapeY):
     samples = []
     for image, label in zip(images, labels):
         samples.append(Sample(label, shapeX, shapeY, image))
-    samples = np.asarray(samples)
+    samples = np.asarray(samples, dtype=object)
     return samples
 
-def convertToClassIncremental(nClasses, test_images, test_labels):
+def convertToClassIncremental(nTasks, taskSize, test_images, test_labels):
     test_samples = []
-    for c in range(nClasses):
-        indexes = np.where(test_labels == c)
+    for t in range(nTasks):
+        # indexes = np.where(test_labels == c)
+        indexes = np.where((test_labels >= t*taskSize) & 
+                           (test_labels < (t+1)*taskSize))
+        
         samples = generateSamples(test_images[indexes],
                                   test_labels[indexes],
                                   test_images[indexes].shape[1],
                                   test_images[indexes].shape[2])
         test_samples.append(samples)
-    test_samples = np.asarray(test_samples)
+    test_samples = np.asarray(test_samples, dtype=object)
     return test_samples
 
 def convertToTaskIncremental(nTasks, taskSize, test_images, test_labels):
@@ -128,11 +132,11 @@ def convertToTaskIncremental(nTasks, taskSize, test_images, test_labels):
         indexes = np.where((test_labels >= t*taskSize) & 
                            (test_labels < (t+1)*taskSize))
         samples = generateSamples(test_images[indexes],
-                                  test_labels[indexes],
+                                  test_labels[indexes] % taskSize,
                                   test_images[indexes].shape[1],
                                   test_images[indexes].shape[2])
         test_samples.append(samples)
-    test_samples = np.asarray(test_samples)
+    test_samples = np.asarray(test_samples, dtype=object)
     return test_samples
 
 def loadNistTestData(path, trainingType, nTasks, taskSize):
@@ -154,7 +158,8 @@ def loadNistTestData(path, trainingType, nTasks, taskSize):
 
     samples = None
     if trainingType == 'class':
-        samples = convertToClassIncremental(nTasks*taskSize,
+        samples = convertToClassIncremental(nTasks,
+                                            taskSize,
                                             test_images,
                                             test_labels)
     else:
@@ -169,7 +174,6 @@ def loadNistTestData(path, trainingType, nTasks, taskSize):
     #                                 )
 
     return samples
-
 
 def loadNistTrainData(path):
     """
@@ -303,44 +307,45 @@ def dumpSplitData(images, labels, nClasses, path):
         pkl.dump(samples, open(os.path.join(path, str(c) + ".pkl"), 'wb'))
     
 
-def breakImages(samples, split_size):
+def breakImages(samples, patch_size, stride):
     """
     Split the dataset where each image is broken into patches
 
     :param samples: dataset
     :type samples: list of sample objects
-    :param split_size: size of patches
-    :type split_size: int
+    :param patch_size: size of patches
+    :type v: int
     :return: batch of patches of all input samples
     :rtype: tensor -> [n, number of patches, split_size, split_size, 1]
     """
     # add number of channels for grayscaled images
     # Shape: (batch_size, height, width, channels)
     images = tf.convert_to_tensor([sample.getImage() for sample in samples])
+    image_shape = images.shape[1:]
     labels = tf.convert_to_tensor([sample.getLabel() for sample in samples])
     images = tf.expand_dims(images, -1)
     
     # Define the parameters for patch extraction
-    patch_size = [1, split_size, split_size, 1]  # Size of each patch
-    strides = [1, split_size, split_size, 1]     # Strides for patch extraction
+    patch_sizes = [1, patch_size, patch_size, 1]  # Size of each patch
+    strides = [1, stride, stride, 1]     # Strides for patch extraction
     rates = [1, 1, 1, 1]       # Dilation rates
 
     # Extract patches from the input tensors
     patches = tf.image.extract_patches(images=images,
-                                    sizes=patch_size,
+                                    sizes=patch_sizes,
                                     strides=strides,
                                     rates=rates,
                                     padding='VALID')
-    
     # Reshape the patches to the desired shape
-    num_patches = patches.shape[1] * patches.shape[2]
-    patches = tf.reshape(patches, (-1, num_patches, split_size, split_size))
-
+    num_patches_height = (image_shape[0] - patch_size) // stride + 1
+    num_patches_width = (image_shape[1] - patch_size) // stride + 1
+    num_patches = num_patches_height * num_patches_width
+    patches = tf.reshape(patches, (-1, num_patches, patch_size, patch_size))
     samples = []
-    for index in range(patches.shape[0]):
+    for imageIndex in range(patches.shape[0]):
         row = []
-        for count in range(patches.shape[1]):
-            row.append(Sample(labels[index], patches.shape[2], patches.shape[-1], patches[index, count, :, :]))
+        for patchIndex in range(patches.shape[1]):
+            row.append(Sample(labels[imageIndex], patch_size, patch_size, patches[imageIndex, patchIndex, :, :]))
         samples.append(np.asarray(row))
     samples = np.asarray(samples)
     
@@ -387,6 +392,7 @@ def dump_cifar_channels(split, class_number, y_labels,
     pkl.dump(np.asarray(g_samples), open(os.path.join('../data/cifar-10/', split, 'green_channel_samples', str(class_number) + '.pkl'), 'wb'))
     pkl.dump(np.asarray(b_samples), open(os.path.join('../data/cifar-10/', split, 'blue_channel_samples', str(class_number) + '.pkl'), 'wb'))
 
+
 def saveCifarImages():
     """
     Load cifar-10 images and save them class wise in the form of
@@ -396,6 +402,8 @@ def saveCifarImages():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_train = x_train.astype('float32') / 255.0 
     x_test = x_test.astype('float32') / 255.0 
+    y_train = np.squeeze(y_train)
+    y_test = np.squeeze(y_test)
 
     if not os.path.isdir(os.path.join('../data/cifar-10/train/colored')):
         os.makedirs(os.path.join('../data/cifar-10/train/colored'))
@@ -405,13 +413,13 @@ def saveCifarImages():
         indices = np.where(y_train == c)[0]
         samples = []
         for index in indices:
-            samples.append(Sample(y_train[index][0].astype(np.int32), 32, 32, x_train[index]))
+            samples.append(Sample(y_train[index].astype(np.int32), 32, 32, x_train[index]))
         pkl.dump(np.asarray(samples), open(os.path.join("../data/cifar-10/train/colored/", str(c)+'.pkl'), 'wb'))
 
         indices = np.where(y_test == c)[0]
         samples = []
         for index in indices:
-            samples.append(Sample(y_test[index][0].astype(np.int32), 
+            samples.append(Sample(y_test[index].astype(np.int32), 
                                   32, 32, x_test[index]))
         pkl.dump(np.asarray(samples), open(os.path.join("../data/cifar-10/test/colored/", str(c)+'.pkl'), 'wb'))
         
@@ -424,6 +432,8 @@ def splitCifarChannels():
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_train = x_train.astype('float32') / 255.0 
     x_test = x_test.astype('float32') / 255.0 
+    y_train = np.squeeze(y_train)
+    y_test = np.squeeze(y_test)
     
     # Split the images into Red, Green and Blue channels
     red_channel = x_train[..., 0] 
@@ -445,4 +455,16 @@ def splitCifarChannels():
     for class_number in tqdm(range(10)):
         dump_cifar_channels('test', class_number, y_test,
                             red_channel, green_channel, blue_channel)
-        
+
+
+def saveBuffer(buffer_data, filename):
+    """
+    keeps pushing the SOM to a file like a buffer
+
+    :param som: SOM
+    :type som: matrix
+    :param filename: filename
+    :type filename: string
+    """
+    buffer_data = buffer_data[1:]
+    pkl.dump(buffer_data, open(filename, 'wb'))

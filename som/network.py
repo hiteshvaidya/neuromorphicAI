@@ -54,12 +54,12 @@ class Network(tf.keras.Model):
         units = []
         for _ in range(self.unitsX * self.unitsY):
             current_time = time.time() - st
-            units.append(tf.random.normal([imgSize, imgSize], mean=0.4, stddev=0.3, seed=current_time))
+            units.append(tf.random.normal([imgSize, imgSize], mean=0.6, stddev=0.2, seed=current_time))
         print('units: ', len(units))
         # stack the units along rows and columns or reshape to form the SOM
         self.som = tf.concat([tf.concat(units_col, axis=1) for units_col in tf.split(units, self.unitsX)], axis=0)
         # reshape the SOM
-        self.som = tf.reshape(self.som, [self.shapeY, self.shapeX])
+        self.som = tf.reshape(self.som, [self.shapeX, self.shapeY])
 
         # clip values between 0 and 1
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
@@ -71,6 +71,11 @@ class Network(tf.keras.Model):
         self.running_variance = tf.ones([self.shapeX, self.shapeY]) * running_variance
         # alpha value for updating running variance
         self.running_variance_alpha = running_variance_alpha
+
+        # create a buffer of som and running variance to save it offline
+        self.som_buffer = tf.zeros([1, self.shapeX, self.shapeY])
+        # create a buffer of running variance to save it offline
+        self.running_variance_buffer = tf.zeros([1, self.shapeX, self.shapeY])
 
         # Calculate distances between units of the SOM
         self.cartesian_distances = util.calculate_distances(n_units, n_units)
@@ -90,7 +95,7 @@ class Network(tf.keras.Model):
         # Declare the layers of the network
         self.layer1 = CustomDistanceLayer(imgSize, n_units)
         self.layer2 = MinLayer(n_units)
-
+    
     def decayRadius(self, bmu):
         """
         Decay current radius value of the best matching unit
@@ -212,7 +217,7 @@ class Network(tf.keras.Model):
 
         # clip the values of SOM
         self.som = tf.clip_by_value(self.som, 0.0, 1.0)
-
+        
         self.class_count = tf.tensor_scatter_nd_update(self.class_count, [[bmu[0], bmu[1], label]], [self.class_count[bmu[0], bmu[1], label] + 1])
 
         # we need some alpha value to update running variance 
@@ -245,10 +250,11 @@ class Network(tf.keras.Model):
         """
         tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
         bmu = self.layer2(unit_map)
-        if len(args) > 0:
+        if len(args) > 1:
             self.vanilla_weight_update(bmu, tiled_input, y, args[0])
         else:
             self.weight_update(bmu, tiled_input, y)
+        
     
     def fit(self, train_samples, folder_path, index, task_size, training_type, *args):
         """
@@ -266,6 +272,7 @@ class Network(tf.keras.Model):
         :type training_type: str
         """
         tqdm.write("fitting model for task " + str(index))
+        counter = 1
         for cursor, sample in tqdm(enumerate(train_samples)):
             label = util.getTrainingLabel(sample.getLabel(),
                                           task_size,
@@ -276,10 +283,29 @@ class Network(tf.keras.Model):
             else:
                 self(sample.getImage(), label)
             
+            # accumulate som and running_variance in their respective buffers
+            # self.accumulate("som")
+            # self.accumulate("variance")
+            
+            # offload the buffers if they have 100 elements stored already
+        #     if self.som_buffer.shape[0] == 50:
+        #         if not os.path.exists(os.path.join(folder_path, "buffer")):
+        #             os.mkdir(os.path.join(folder_path, "buffer"))
+        #         self.saveBuffers(os.path.join(folder_path, "buffer"), counter)
+        #         counter += 1
+        
+        # if self.som_buffer.shape[0] > 1:
+        #     self.saveBuffers(os.path.join(folder_path, "buffer"), counter)
+            
         # save the image of current state of SOM
-        print('folder path: ', folder_path)
         self.saveImage(folder_path, index)
     
+    def getModel(self):
+        return self.som
+
+    def getRunningVariance(self):
+        return self.running_variance
+
     def getConfig(self):
         """
         Get configuration of this model for saving it
@@ -301,6 +327,29 @@ class Network(tf.keras.Model):
         config['tau_lr'] = self.tau_lr
 
         return config
+    
+    def accumulate(self, choice):
+        if choice == "som":
+            temp = tf.expand_dims(self.som, 0)
+            self.som_buffer = tf.concat([self.som_buffer, temp], 0)
+        elif choice == 'variance':
+            temp = tf.expand_dims(self.running_variance, 0)
+            self.running_variance_buffer = tf.concat([self.running_variance_buffer, temp], 0)
+        
+    
+    def saveBuffers(self, folderpath, counter):
+        dataloader.saveBuffer(self.som_buffer, 
+                                os.path.join(folderpath, 
+                                             "som_buffer-"+str(counter)+".pkl"))
+        dataloader.saveBuffer(self.running_variance_buffer, 
+                                os.path.join(folderpath,
+                                            "running_variance_buffer-"+str(counter)+".pkl"))
+        
+        # reset buffer of som and running variance to save it offline
+        self.som_buffer = tf.zeros([1, self.shapeX, self.shapeY])
+        self.running_variance_buffer = tf.zeros([1, self.shapeX, self.shapeY])
+
+
 
 if __name__ == '__main__':
 

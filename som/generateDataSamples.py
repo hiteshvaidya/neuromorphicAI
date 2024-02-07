@@ -48,5 +48,5 @@ if __name__ == "__main__":
     generateTrainSamples("fashion")
     generateTestSamples("fashion")
 
-    generateTrainSamples("kmnist")
-    generateTestSamples("kmnist")
+    # generateTrainSamples("kmnist")
+    # generateTestSamples("kmnist")
