@@ -14,7 +14,7 @@ model
 # Distribution / packaging
 .Python
 build/
-data/
+# data/
 logs/
 checkpoints/
 develop-eggs/
