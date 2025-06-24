@@ -91,7 +91,7 @@ if __name__ == '__main__':
     test_samples = []
     # load test samples
     if "nist" in args.dataset or "fashion" in args.dataset:
-        test_samples = dataloader.loadNistTestData("../data/" + args.dataset, 
+        test_samples = dataloader.loadNistTestData(os.path.join("../data", args.dataset, 'raw'), 
                                                args.training_type, 
                                                args.n_tasks, 
                                                args.task_size)

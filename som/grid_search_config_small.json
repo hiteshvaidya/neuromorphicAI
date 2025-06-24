@@ -1,0 +1,15 @@
+{
+  "dataset": ["mnist", "fashion", "kmnist"],
+  "units": [10, 15],
+  "radius": [0.6, 1.0],
+  "learning_rate": [0.07, 0.1],
+  "variance_alpha": [0.9],
+  "variance": [0.5, 1.0],
+  "task_size": [1],
+  "tau_radius": [8],
+  "tau_lr": [45],
+  "unit_size": [28],
+  "n_tasks": [10],
+  "training_type": ["class"],
+  "vanilla": [false, true]
+}
