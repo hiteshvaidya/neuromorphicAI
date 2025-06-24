@@ -241,7 +241,7 @@ class Network(tf.keras.Model):
         self.decayLearningRate(bmu)
 
     
-    def call(self, x, y, *args):
+    def call(self, x, y=None, timeStep=None):
         """
         Forward pass through the network
 
@@ -250,8 +250,8 @@ class Network(tf.keras.Model):
         """
         tiled_input, unit_map = self.layer1(self.som, self.running_variance, x)
         bmu = self.layer2(unit_map)
-        if len(args) > 1:
-            self.vanilla_weight_update(bmu, tiled_input, y, args[0])
+        if timeStep is not None:
+            self.vanilla_weight_update(bmu, tiled_input, y, timeStep) #args[0])
         else:
             self.weight_update(bmu, tiled_input, y)
         
@@ -277,11 +277,16 @@ class Network(tf.keras.Model):
             label = util.getTrainingLabel(sample.getLabel(),
                                           task_size,
                                           training_type)
+            
             # forward pass
+            # try:
             if len(args) > 0:
-                self(sample.getImage(), label, args[1]+cursor)
+                self(sample.getImage(), y=label, timeStep=args[1]+cursor)
             else:
-                self(sample.getImage(), label)
+                self(sample.getImage(), y=label)
+            # except Exception as e:
+            #     print(f"label: {label}, type: {type(label)}")
+            #     exit(1)
             
             # accumulate som and running_variance in their respective buffers
             # self.accumulate("som")
@@ -445,19 +450,20 @@ if __name__ == '__main__':
     test_model.setPMI()
     print("model and class predictions loaded")
 
-    test_samples = dataloader.loadNistTestData("../data/" + args.dataset)
+    test_samples = dataloader.loadNistTestData(os.path.join("../data/", args.dataset, "raw"), args.training_type, args.n_tasks, args.task_size)
     predictions = []
     labels = []
     tqdm.write("measuring test accuracy")
-    for sample in tqdm(test_samples): 
-        feature_map = test_model.layer1(test_config['som'], sample.getImage())
-        bmu = test_model.layer2(feature_map)
-        output = tf.math.argmax(test_model.get_bmu_PMI(bmu))
-        label = util.getTrainingLabel(sample.getLabel(), 
-                                       args.task_size, 
-                                       args.training_type)
-        predictions.append(output)
-        labels.append(label)
+    for class_samples in tqdm(test_samples): 
+        for sample in class_samples:
+            feature_map = test_model.layer1(test_config['som'], sample.getImage())
+            bmu = test_model.layer2(feature_map)
+            output = tf.math.argmax(test_model.get_bmu_PMI(bmu))
+            label = util.getTrainingLabel(sample.getLabel(), 
+                                        args.task_size, 
+                                        args.training_type)
+            predictions.append(output)
+            labels.append(label)
     predictions = tf.cast(tf.stack(predictions), dtype=tf.float32)
     labels = tf.cast(labels, dtype=tf.float32)
     
