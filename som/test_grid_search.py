@@ -76,11 +76,11 @@ def test_conda_env():
     try:
         result = subprocess.run(['conda', 'env', 'list'], 
                               capture_output=True, text=True)
-        if 'tf' in result.stdout:
-            print("✓ Conda environment 'tf' found")
+        if 'som' in result.stdout:
+            print("✓ Conda environment 'som' found")
             return True
         else:
-            print("✗ Conda environment 'tf' not found")
+            print("✗ Conda environment 'som' not found")
             return False
     except FileNotFoundError:
         print("✗ conda not found")
@@ -118,22 +118,31 @@ def run_small_test():
     """Run a small grid search test"""
     print("\nRunning small grid search test...")
     
+    # Get GPU count for parallel execution
+    gpu_count = test_gpu_setup()
+    max_workers = max(1, gpu_count)  # Use at least 1 worker, more if GPUs available
+    
     cmd = [
         "python", "grid_search_transfer_metrics.py",
-        "--conda-env", "tf",
-        "--max-workers", "1",
+        "--conda-env", "som",
+        "--max-workers", str(max_workers),
         "--results-dir", "test_results",
         "--config-file", "grid_search_config_small.json"
     ]
     
     print("Command:", " ".join(cmd))
+    print(f"This will run a small grid search using {max_workers} workers (GPUs)")
     print("This will run a small grid search with 2 datasets × 2 units × 2 radius × 2 learning_rate × 2 variance × 2 vanilla = 64 experiments")
-    print("Estimated time: 10-30 minutes depending on hardware")
+    if max_workers > 1:
+        estimated_time = f"Estimated time: {5 + (10 // max_workers)}-{15 + (30 // max_workers)} minutes with {max_workers} GPUs"
+    else:
+        estimated_time = "Estimated time: 10-30 minutes with CPU"
+    print(estimated_time)
     
     response = input("Do you want to run the test? (y/N): ")
     if response.lower() == 'y':
         try:
-            result = subprocess.run(cmd, cwd="/home/hvaidya/documents/neuromorphicAI/som")
+            result = subprocess.run(cmd, cwd=os.getcwd())
             return result.returncode == 0
         except Exception as e:
             print(f"Error running test: {e}")
@@ -174,9 +183,9 @@ def main():
         print("✗ No GPUs available - will use CPU (slower)")
     
     if conda_ok:
-        print("✓ Conda environment 'tf' ready")
+        print("✓ Conda environment 'som' ready")
     else:
-        print("✗ Conda environment 'tf' not found")
+        print("✗ Conda environment 'som' not found")
     
     if data_ok:
         print("✓ Data directory structure looks good")

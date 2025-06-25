@@ -29,7 +29,7 @@ sns.set_palette("husl")
 
 
 class GridSearchManager:
-    def __init__(self, conda_env="tf", max_workers=None, results_dir="grid_search_results"):
+    def __init__(self, conda_env="som", max_workers=None, results_dir="grid_search_results"):
         """
         Initialize GridSearchManager
         
@@ -112,7 +112,7 @@ class GridSearchManager:
             # Run experiment
             start_time = time.time()
             result = subprocess.run(cmd, capture_output=True, text=True, 
-                                  cwd="/home/hvaidya/documents/neuromorphicAI/som")
+                                  cwd=os.getcwd())
             end_time = time.time()
             
             if result.returncode != 0:
@@ -590,7 +590,7 @@ class GridSearchManager:
 
 def main():
     parser = argparse.ArgumentParser(description="Grid Search for Transfer Metric SOM")
-    parser.add_argument('--conda-env', default='tf', help='Conda environment name')
+    parser.add_argument('--conda-env', default='som', help='Conda environment name')
     parser.add_argument('--max-workers', type=int, help='Maximum number of parallel workers')
     parser.add_argument('--results-dir', default='grid_search_results', help='Results directory')
     parser.add_argument('--config-file', help='JSON file with grid search configuration')

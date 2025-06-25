@@ -48,7 +48,7 @@
     ]
   },
   "total_experiments": 96,
-  "max_workers": 1,
-  "conda_env": "tf",
-  "start_time": "2025-06-24T11:09:14.327866"
+  "max_workers": 4,
+  "conda_env": "som",
+  "start_time": "2025-06-25T15:30:12.902909"
 }
