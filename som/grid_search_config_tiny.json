@@ -1,0 +1,15 @@
+{
+  "dataset": ["mnist"],
+  "units": [15],
+  "radius": [1.0],
+  "learning_rate": [0.07],
+  "variance_alpha": [0.9],
+  "variance": [0.5],
+  "task_size": [1],
+  "tau_radius": [8],
+  "tau_lr": [45],
+  "unit_size": [28],
+  "n_tasks": [2],
+  "training_type": ["class"],
+  "vanilla": [true]
+}

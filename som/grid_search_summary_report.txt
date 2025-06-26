@@ -1,0 +1,73 @@
+GRID SEARCH EXPERIMENTS SUMMARY REPORT
+============================================================
+
+DATASET BREAKDOWN
+--------------------
+FASHION: 32 experiments
+KMNIST: 32 experiments
+MNIST: 32 experiments
+TOTAL: 96 experiments
+
+PERFORMANCE METRICS SUMMARY
+------------------------------
+Backward Transfer:
+  Mean: -0.2195
+  Std:  0.1016
+  Min:  -0.9550
+  Max:  -0.0814
+
+Average Accuracy:
+  Mean: 0.3831
+  Std:  0.2267
+  Min:  0.0326
+  Max:  0.7663
+
+Learning Accuracy:
+  Mean: 0.5766
+  Std:  0.1863
+  Min:  0.2969
+  Max:  0.8875
+
+Forgetting Measure:
+  Mean: 0.2681
+  Std:  0.1315
+  Min:  0.0851
+  Max:  0.5369
+
+Memory (bytes):
+  Mean: 168.0000
+  Std:  0.0000
+  Min:  168.0000
+  Max:  168.0000
+
+BEST PERFORMERS BY DATASET
+------------------------------
+
+FASHION DATASET:
+  Best Average Accuracy: 0.7663
+    Experiment: grid_search_fashion_52
+    Parameters: units=15, tau_radius=8.0, tau_lr=45.0
+  Best BWT (least forgetting): -0.0814
+    Experiment: grid_search_fashion_34
+
+KMNIST DATASET:
+  Best Average Accuracy: 0.7379
+    Experiment: grid_search_kmnist_88
+    Parameters: units=15, tau_radius=8.0, tau_lr=45.0
+  Best BWT (least forgetting): -0.0926
+    Experiment: grid_search_kmnist_84
+
+MNIST DATASET:
+  Best Average Accuracy: 0.7589
+    Experiment: grid_search_mnist_28
+    Parameters: units=15, tau_radius=8.0, tau_lr=45.0
+  Best BWT (least forgetting): -0.1191
+    Experiment: grid_search_mnist_28
+
+
+PARAMETER SUMMARY
+--------------------
+UNITS: 2 unique values [np.int64(10), np.int64(15)]
+UNIT_SIZE: 1 unique values [np.int64(28)]
+TAU_RADIUS: 1 unique values [np.float64(8.0)]
+TAU_LR: 1 unique values [np.float64(45.0)]

@@ -198,14 +198,12 @@ if __name__ == '__main__':
     pkl.dump(config, 
                 open(os.path.join(folder_path, 'model_config.pkl'), 'wb'))
     
-    fwt = util.getFWT(final_accuracies, b)
     bwt = util.getBWT(final_accuracies)
     avgAccuracy = util.getAverageAccuracy(final_accuracies)
     learningAccuracy = util.getLearningAccuracy(final_accuracies)
     forgettingMeasure = util.getForgettingMeasure(final_accuracies)
 
     print('b = ', b)
-    print('fwt: ', fwt)
     print('bwt: ', bwt)
     print('average accuracy: ', avgAccuracy)
     print('learning accuracy: ', learningAccuracy)
@@ -221,7 +219,6 @@ if __name__ == '__main__':
 
     with open(os.path.join(folder_path, 'tranfer_metrics.txt'), 'w') as fp:
         fp.write('b = ' + ", ".join([str(x) for x in b]) + '\n')
-        fp.write('fwt = ' + str(fwt) + '\n')
         fp.write('bwt = ' + str(bwt) + '\n')
         fp.write('average accuracy = ' + str(avgAccuracy) + '\n')
         fp.write('learning accuracy = ' + str(learningAccuracy) + '\n')
@@ -231,8 +228,8 @@ if __name__ == '__main__':
     
     with open(os.path.join(folder_path, 'metrics.csv'), 'w') as file:
         writer = csv.writer(file)
-        writer.writerow(["b", "fwt", "bwt", "AA", "LA", "FM", "mem"])
-        writer.writerow([b, fwt, bwt, avgAccuracy, learningAccuracy, forgettingMeasure, util.getMemory(network.getModel())])
+        writer.writerow(["b", "bwt", "AA", "LA", "FM", "mem"])
+        writer.writerow([b, bwt, avgAccuracy, learningAccuracy, forgettingMeasure, util.getMemory(network.getModel())])
 
     del network
     

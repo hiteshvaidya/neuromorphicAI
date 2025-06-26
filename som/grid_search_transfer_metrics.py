@@ -98,10 +98,8 @@ class GridSearchManager:
         :return: Dictionary with results
         """
         try:
-            # Create experiment directory
+            # Create experiment directory name
             exp_dir = f"grid_search_{params['dataset']}_{experiment_id}"
-            log_dir = os.path.join(self.results_dir, "logs", exp_dir)
-            os.makedirs(log_dir, exist_ok=True)
             
             # Build command
             cmd = self._build_command(params, gpu_id, exp_dir)
@@ -121,7 +119,7 @@ class GridSearchManager:
                 return None
             
             # Parse results
-            results = self._parse_results(log_dir, params, experiment_id)
+            results = self._parse_results(exp_dir, params, experiment_id)
             results['execution_time'] = end_time - start_time
             results['gpu_id'] = gpu_id
             
@@ -160,37 +158,43 @@ class GridSearchManager:
         
         return cmd
     
-    def _parse_results(self, log_dir, params, experiment_id):
+    def _parse_results(self, exp_dir, params, experiment_id):
         """Parse results from experiment log files"""
         results = params.copy()
         results['experiment_id'] = experiment_id
         
-        # Parse metrics from metrics.csv
-        metrics_file = os.path.join("logs", log_dir, "metrics.csv")
+        # Parse metrics from metrics.csv (transfer_metric_som.py creates logs/{exp_dir}/metrics.csv)
+        metrics_file = os.path.join("logs", exp_dir, "metrics.csv")
+        print(f"[DEBUG] Looking for metrics file: {metrics_file}")
+        
         try:
             if os.path.exists(metrics_file):
                 df = pd.read_csv(metrics_file)
                 if len(df) > 0:
                     row = df.iloc[0]
                     results['bwt'] = row['bwt']
-                    results['fwt'] = row['fwt'] 
                     results['average_accuracy'] = row['AA']
                     results['learning_accuracy'] = row['LA']
                     results['forgetting_measure'] = row['FM']
                     results['memory'] = row['mem']
+                    print(f"[DEBUG] Successfully parsed metrics for experiment {experiment_id}")
+                else:
+                    print(f"Warning: metrics.csv is empty for experiment {experiment_id}")
+                    self._set_default_metrics(results)
             else:
-                print(f"Warning: metrics.csv not found for experiment {experiment_id}")
-                # Set default values
-                for metric in ['bwt', 'fwt', 'average_accuracy', 'learning_accuracy', 
-                             'forgetting_measure', 'memory']:
-                    results[metric] = np.nan
+                print(f"Warning: metrics.csv not found at {metrics_file} for experiment {experiment_id}")
+                self._set_default_metrics(results)
         except Exception as e:
             print(f"Error parsing results for experiment {experiment_id}: {str(e)}")
-            for metric in ['bwt', 'fwt', 'average_accuracy', 'learning_accuracy', 
-                         'forgetting_measure', 'memory']:
-                results[metric] = np.nan
+            self._set_default_metrics(results)
         
         return results
+    
+    def _set_default_metrics(self, results):
+        """Set default NaN values for all metrics"""
+        for metric in ['bwt', 'average_accuracy', 'learning_accuracy', 
+                      'forgetting_measure', 'memory']:
+            results[metric] = np.nan
     
     def run_grid_search(self, grid_config):
         """
